@@ -7,6 +7,7 @@ const StudentDetail = require('../models/StudentDetail');
 const TeacherAssignment = require('../models/TeacherAssignment');
 const User = require('../models/User');
 const { verifyToken, hasRole, isAdmin } = require('../middleware/auth');
+const dataPersistenceService = require('../services/dataPersistenceService');
 
 const router = express.Router();
 const getApiErrorMessage = (error, fallback) => (process.env.NODE_ENV === 'production' ? fallback : (error?.message || fallback));
@@ -123,18 +124,39 @@ const fetchChallengeScoreProfile = async (challengeId, apiKey) => { if (!challen
 
 const calculateCodingChallengeSummary = (submission, fallbackProfile) => {
   const ss = submission && typeof submission === 'object' && !Array.isArray(submission) ? submission : {};
-  const fScores = normalizeQuestionScoreList(fallbackProfile?.questionScores);
-  const sScores = normalizeQuestionScoreList(ss.questionScores);
-  const rqs = sScores.length > 0 ? sScores : fScores;
-  const sTPS = safeNumber(ss.totalPossibleScore, 0); const fTPS = safeNumber(fallbackProfile?.totalPossibleScore, 0);
-  let tps = sTPS > 0 ? roundToTwo(sTPS) : (fTPS > 0 ? roundToTwo(fTPS) : (rqs.length > 0 ? sumScoreList(rqs) : 0));
-  let pqi = normalizeIndexList(ss.passedQuestionIndexes);
-  const allPassed = parseBooleanInput(ss.allTestCasesPassed, false);
-  if (allPassed && rqs.length > 0) pqi = Array.from({ length: rqs.length }, (_, i) => i);
-  const hPC = Math.max(pqi.length, safeInt(ss.passedQuestionCount, 0));
-  if (!pqi.length && hPC > 0 && rqs.length > 0) pqi = Array.from({ length: Math.min(hPC, rqs.length) }, (_, i) => i);
-  if (rqs.length > 0) pqi = pqi.filter(i => i < rqs.length);
-  const tqc = Math.max(rqs.length, safeInt(ss.totalQuestionCount, 0));
+  const questionScores = normalizeQuestionScoreList(ss.questionScores);
+  const testResults = ss.testResults || [];
+  const passedTestCount = testResults.filter(t => t.passed === true).length;
+  const totalTestCount = testResults.length;
+  
+  // Enhanced test case tracking
+  const testCaseDetails = testResults.map((test, index) => ({
+    testCaseId: test.testCaseId || `test_${index + 1}`,
+    passed: test.passed === true,
+    executionTime: test.executionTime || 0,
+    memoryUsage: test.memoryUsage || 0,
+    error: test.error || null,
+    input: test.input || '',
+    expectedOutput: test.expectedOutput || '',
+    actualOutput: test.actualOutput || ''
+  }));
+  
+  return {
+    questionScores,
+    testResults,
+    testCaseDetails,
+    passedTestCount,
+    totalTestCount,
+    totalPossibleScore: sumScoreList(fallbackProfile?.questionScores || questionScores),
+    passedQuestionCount: questionScores.filter((score, idx) => {
+      const testResult = testResults[idx];
+      return testResult && testResult.passed === true;
+    }).length,
+    totalQuestionCount: questionScores.length,
+    executionTime: ss.executionTime || 0,
+    memoryUsage: ss.memoryUsage || 0,
+    lastSubmissionTime: ss.lastSubmissionTime || null
+  };
   let pqc = Math.max(pqi.length, hPC); if (allPassed && tqc > 0) pqc = tqc; if (tqc > 0) pqc = Math.min(tqc, pqc);
   const atp = tqc > 0 ? (allPassed || pqc >= tqc) : allPassed;
   let score = 0;
@@ -522,28 +544,215 @@ router.get('/student/attempts/:attemptId', verifyToken, hasRole('student'), asyn
     const { attemptId } = req.params;
     const forceTakeover = String(req.query?.forceTakeover || '').toLowerCase() === 'true';
     const sessionToken = getExamSessionToken(req);
+    const { enableBackup = true, restoreFromBackup = false } = req.query;
+    
+    // Validate attempt ID format
+    if (!attemptId || typeof attemptId !== 'string' || attemptId.trim().length === 0) {
+      return res.status(400).json({ error: 'Invalid attempt ID provided' });
+    }
+    
     let attempt = await AssessmentAttempt.findOne({ _id: attemptId, student_id: req.user.id }).lean();
-    if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
+    if (!attempt) {
+      // Try to restore from backup if attempt not found
+      if (restoreFromBackup === 'true') {
+        try {
+          const restoreResult = await dataPersistenceService.restoreFromBackup(attemptId, { forceRestore: true });
+          if (restoreResult.success) {
+            attempt = await AssessmentAttempt.findById(attemptId).lean();
+            console.log(`Successfully restored attempt ${attemptId} from backup`);
+          }
+        } catch (restoreError) {
+          console.error('Failed to restore from backup:', restoreError);
+        }
+      }
+      
+      if (!attempt) {
+        return res.status(404).json({ error: 'Attempt not found or you do not have access to it' });
+      }
+    }
+    
     const hostedExam = await HostedAssessment.findById(attempt.hosted_assessment_id).lean();
-    const template = hostedExam ? await AssessmentTemplate.findById(hostedExam.template_id).lean() : null;
+    if (!hostedExam) {
+      return res.status(404).json({ error: 'Associated assessment not found' });
+    }
+    
+    const template = await AssessmentTemplate.findById(hostedExam.template_id).lean();
+    if (!template) {
+      return res.status(404).json({ error: 'Assessment template not found' });
+    }
+    
     const hosted = { ...hostedExam, template };
+    
+    // Check if assessment is still within valid window
+    const windowCheck = isWithinAttemptWindow(hostedExam);
+    if (!windowCheck.allowed) {
+      return res.status(400).json({ error: windowCheck.reason });
+    }
+    
+    // Validate attempt status and handle edge cases
+    if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
+      // Allow viewing submitted attempts but mark them appropriately
+      console.log(`Student ${req.user.id} accessing submitted attempt ${attemptId}`);
+      
+      // Update best score record for submitted attempts
+      try {
+        await dataPersistenceService.updateBestScoreRecord(attemptId);
+      } catch (scoreError) {
+        console.error('Failed to update best score record:', scoreError);
+      }
+    } else if (attempt.status !== 'in_progress') {
+      return res.status(400).json({ error: `Invalid attempt status: ${attempt.status}` });
+    }
+    
+    // Check if attempt has expired but not yet marked as submitted
+    const remainingSeconds = getRemainingSeconds(attempt, hostedExam);
+    if (attempt.status === 'in_progress' && remainingSeconds <= 0) {
+      // Create backup before auto-submitting
+      if (enableBackup === 'true') {
+        try {
+          await dataPersistenceService.createBackup(attemptId, 'submit_backup', {
+            trigger: 'auto_submit',
+            reason: 'Attempt expired during load',
+          });
+        } catch (backupError) {
+          console.error('Failed to create backup before auto-submit:', backupError);
+        }
+      }
+      
+      // Auto-submit expired attempts
+      try {
+        const { updatedAttempt } = await submitAttemptWithScoring({ 
+          attempt: { ...attempt, hosted: hostedExam }, 
+          forceAutoSubmit: true 
+        });
+        attempt = updatedAttempt;
+        
+        // Update best score record after auto-submit
+        await dataPersistenceService.updateBestScoreRecord(attemptId);
+      } catch (submitError) {
+        console.error('Failed to auto-submit expired attempt:', submitError);
+        return res.status(400).json({ error: 'Assessment time has expired and could not be auto-submitted' });
+      }
+    }
+    
     const sessionMeta = getAttemptSessionMeta(attempt.answers);
     const hasDifferentSession = Boolean(sessionMeta.token && sessionToken && sessionMeta.token !== sessionToken);
-    if (attempt.status === 'in_progress' && hasDifferentSession && !forceTakeover) return res.status(409).json(buildSessionConflictResponse('This attempt is active in another browser session.', attempt._id));
+    
+    if (attempt.status === 'in_progress' && hasDifferentSession && !forceTakeover) {
+      return res.status(409).json(buildSessionConflictResponse('This attempt is active in another browser session.', attempt._id));
+    }
+    
     if (attempt.status === 'in_progress' && sessionToken && (!sessionMeta.token || forceTakeover)) {
       const updated = await AssessmentAttempt.findByIdAndUpdate(attempt._id, { answers: applyAttemptSessionMeta(attempt.answers, sessionToken) }, { new: true }).lean();
       attempt = updated;
     }
+    
     const questions = normalizeQuestionList(template?.template_data);
-    if (!questions.length) return res.status(400).json({ error: 'Questions not configured' });
-    const remainingSeconds = getRemainingSeconds(attempt, hostedExam);
+    if (!questions.length) {
+      return res.status(400).json({ error: 'Assessment questions are not properly configured' });
+    }
+    
     const sectionState = getAttemptSectionState(attempt.answers);
-    res.json({
-      hostedAssessment: { id: hostedExam?._id, title: hostedExam?.exam_title || template?.title || 'Assessment', subject: template?.subject || 'N/A', instructions: hostedExam?.instructions || '', allow_resume: hostedExam?.allow_resume !== false, result_mode: hostedExam?.result_mode, start_time: hostedExam?.start_time, end_time: hostedExam?.end_time, duration_minutes: hostedExam?.duration_minutes, max_attempts: hostedExam?.max_attempts, coding_section: sanitizeCodingSectionForStudent(hostedExam?.coding_section, sectionState) },
-      attempt: { id: attempt._id, attempt_number: attempt.attempt_number, status: attempt.status, started_at: attempt.started_at, submitted_at: attempt.submitted_at, answers: attempt.answers || {}, score: attempt.score, total_marks: attempt.total_marks, percentage: attempt.percentage, correct_count: attempt.correct_count, total_questions: attempt.total_questions, current_section: sectionState.currentSection, section_completion_order: { mcq_completed_at: sectionState.mcqCompletedAt, coding_entered_at: sectionState.codingEnteredAt }, remaining_seconds: remainingSeconds },
-      questions: sanitizeQuestionsForStudent(questions)
-    });
-  } catch (error) { console.error('Get student attempt error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch attempt') }); }
+    const finalRemainingSeconds = getRemainingSeconds(attempt, hostedExam);
+    
+    // Setup progressive backup for in-progress attempts
+    if (attempt.status === 'in_progress' && enableBackup === 'true') {
+      try {
+        // Create initial backup
+        await dataPersistenceService.createBackup(attemptId, 'session_backup', {
+          trigger: 'session_start',
+          browserInfo: {
+            user_agent: req.headers['user-agent'],
+            ip: req.ip,
+          },
+          networkInfo: {
+            is_online: true,
+          },
+        });
+        
+        // Setup progressive save
+        dataPersistenceService.setupProgressiveSave(attemptId, {
+          intervalMs: 30000, // 30 seconds
+          maxBackups: 50,
+          immediateFirst: false, // Already created initial backup
+        });
+      } catch (backupError) {
+        console.error('Failed to setup progressive backup:', backupError);
+      }
+    }
+    
+    // Get comprehensive data for debugging and monitoring
+    let comprehensiveData = null;
+    if (req.query.includeComprehensive === 'true') {
+      try {
+        comprehensiveData = await dataPersistenceService.getComprehensiveAttemptData(attemptId);
+      } catch (dataError) {
+        console.error('Failed to get comprehensive data:', dataError);
+      }
+    }
+    
+    const responseData = {
+      hostedAssessment: { 
+        id: hostedExam._id, 
+        title: hostedExam.exam_title || template.title || 'Assessment', 
+        subject: template.subject || 'N/A', 
+        instructions: hostedExam.instructions || '', 
+        allow_resume: hostedExam.allow_resume !== false, 
+        result_mode: hostedExam.result_mode, 
+        start_time: hostedExam.start_time, 
+        end_time: hostedExam.end_time, 
+        duration_minutes: hostedExam.duration_minutes, 
+        max_attempts: hostedExam.max_attempts, 
+        coding_section: sanitizeCodingSectionForStudent(hostedExam.coding_section, sectionState) 
+      },
+      attempt: { 
+        id: attempt._id, 
+        attempt_number: attempt.attempt_number, 
+        status: attempt.status, 
+        started_at: attempt.started_at, 
+        submitted_at: attempt.submitted_at, 
+        answers: attempt.answers || {}, 
+        score: attempt.score, 
+        total_marks: attempt.total_marks, 
+        percentage: attempt.percentage, 
+        correct_count: attempt.correct_count, 
+        total_questions: attempt.total_questions, 
+        current_section: sectionState.currentSection, 
+        section_completion_order: { 
+          mcq_completed_at: sectionState.mcqCompletedAt, 
+          coding_entered_at: sectionState.codingEnteredAt 
+        }, 
+        remaining_seconds: finalRemainingSeconds 
+      },
+      questions: sanitizeQuestionsForStudent(questions),
+      data_persistence: {
+        backup_enabled: enableBackup === 'true',
+        progressive_save_active: attempt.status === 'in_progress' && enableBackup === 'true',
+        backup_available: comprehensiveData?.hasValidBackups || false,
+        last_backup_time: comprehensiveData?.latestBackup?.backup_timestamp || null,
+      },
+    };
+    
+    // Include comprehensive data if requested
+    if (comprehensiveData) {
+      responseData.comprehensive_data = {
+        backup_count: comprehensiveData.backupCount,
+        best_score_available: !!comprehensiveData.bestScoreRecord,
+        latest_backup_score: comprehensiveData.latestBackup?.computed_scores?.overall || null,
+      };
+    }
+    
+    res.json(responseData);
+  } catch (error) { 
+    console.error('Get student attempt error:', error);
+    
+    // Handle specific database errors
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: 'Invalid attempt ID format' });
+    }
+    
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch attempt') }); 
+  }
 });
 // Student: mark MCQ complete
 router.post('/student/attempts/:attemptId/mark-mcq-complete', verifyToken, hasRole('student'), async (req, res) => {
@@ -573,43 +782,280 @@ router.post('/student/attempts/:attemptId/mark-mcq-complete', verifyToken, hasRo
 router.post('/student/attempts/:attemptId/submit', verifyToken, hasRole('student'), async (req, res) => {
   try {
     const { attemptId } = req.params;
-    const { answers = {}, forceAutoSubmit: rawForce = false } = req.body || {};
+    const { answers = {}, forceAutoSubmit: rawForce = false, createBackup = true } = req.body || {};
     const forceAutoSubmit = parseBooleanInput(rawForce, false);
+    
     const attempt = await AssessmentAttempt.findOne({ _id: attemptId, student_id: req.user.id }).lean();
     if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
+    
     if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
-      return res.json({ message: 'Attempt already submitted', attempt: { id: attempt._id, status: attempt.status, score: attempt.score, total_marks: attempt.total_marks, percentage: attempt.percentage, correct_count: attempt.correct_count, total_questions: attempt.total_questions, submitted_at: attempt.submitted_at } });
+      // Update best score record even for already submitted attempts
+      try {
+        await dataPersistenceService.updateBestScoreRecord(attemptId);
+      } catch (scoreError) {
+        console.error('Failed to update best score for already submitted attempt:', scoreError);
+      }
+      
+      return res.json({ 
+        message: 'Attempt already submitted', 
+        attempt: { 
+          id: attempt._id, 
+          status: attempt.status, 
+          score: attempt.score, 
+          total_marks: attempt.total_marks, 
+          percentage: attempt.percentage, 
+          correct_count: attempt.correct_count, 
+          total_questions: attempt.total_questions, 
+          submitted_at: attempt.submitted_at 
+        } 
+      });
     }
+    
+    // Create final backup before submission
+    let backupResult = null;
+    if (createBackup === 'true') {
+      try {
+        backupResult = await dataPersistenceService.createBackup(attemptId, 'submit_backup', {
+          trigger: forceAutoSubmit ? 'auto_submit' : 'manual_submit',
+          reason: forceAutoSubmit ? 'Automatic submission' : 'Manual submission',
+          browserInfo: {
+            user_agent: req.headers['user-agent'],
+            ip: req.ip,
+          },
+          networkInfo: {
+            is_online: true,
+          },
+        });
+        
+        // Clear progressive save after submission
+        dataPersistenceService.clearProgressiveSave(attemptId);
+      } catch (backupError) {
+        console.error('Failed to create backup before submission:', backupError);
+        // Don't fail the submission if backup fails
+      }
+    }
+    
     const hosted = await HostedAssessment.findById(attempt.hosted_assessment_id).lean();
     const template = hosted ? await AssessmentTemplate.findById(hosted.template_id).lean() : null;
+    
     let result;
-    try { result = await submitAttemptWithScoring({ attempt: { ...attempt, hosted: { ...hosted, template } }, incomingAnswers: answers, forceAutoSubmit }); }
-    catch (e) { if (e?.statusCode === 400) return res.status(400).json({ error: e.message }); throw e; }
+    try { 
+      result = await submitAttemptWithScoring({ 
+        attempt: { ...attempt, hosted: { ...hosted, template } }, 
+        incomingAnswers: answers, 
+        forceAutoSubmit 
+      }); 
+    } catch (e) { 
+      if (e?.statusCode === 400) return res.status(400).json({ error: e.message }); 
+      throw e; 
+    }
+    
     const { updatedAttempt, resultVisible, resultMode } = result;
-    res.json({ message: 'Attempt submitted successfully', resultVisible, resultMode, attempt: { id: updatedAttempt.id, status: updatedAttempt.status, score: updatedAttempt.score, total_marks: updatedAttempt.total_marks, percentage: updatedAttempt.percentage, correct_count: updatedAttempt.correct_count, total_questions: updatedAttempt.total_questions, submitted_at: updatedAttempt.submitted_at, attempt_number: updatedAttempt.attempt_number } });
-  } catch (error) { console.error('Submit attempt error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to submit attempt') }); }
+    
+    // Update best score record
+    let bestScoreRecord = null;
+    try {
+      bestScoreRecord = await dataPersistenceService.updateBestScoreRecord(attemptId);
+    } catch (scoreError) {
+      console.error('Failed to update best score record:', scoreError);
+    }
+    
+    // Get comprehensive attempt data for response
+    let comprehensiveData = null;
+    try {
+      comprehensiveData = await dataPersistenceService.getComprehensiveAttemptData(attemptId);
+    } catch (dataError) {
+      console.error('Failed to get comprehensive data:', dataError);
+    }
+    
+    const responseData = {
+      message: 'Attempt submitted successfully',
+      resultVisible,
+      resultMode,
+      attempt: { 
+        id: updatedAttempt.id, 
+        status: updatedAttempt.status, 
+        score: updatedAttempt.score, 
+        total_marks: updatedAttempt.total_marks, 
+        percentage: updatedAttempt.percentage, 
+        correct_count: updatedAttempt.correct_count, 
+        total_questions: updatedAttempt.total_questions, 
+        submitted_at: updatedAttempt.submitted_at, 
+        attempt_number: updatedAttempt.attempt_number,
+        section_results: updatedAttempt.section_results || null,
+      },
+    };
+    
+    // Include backup information if created
+    if (backupResult) {
+      responseData.final_backup = {
+        id: backupResult._id,
+        type: backupResult.backup_type,
+        timestamp: backupResult.backup_timestamp,
+        data_hash: backupResult.data_hash,
+        computed_scores: backupResult.computed_scores,
+      };
+    }
+    
+    // Include best score information
+    if (bestScoreRecord) {
+      responseData.best_score_info = {
+        is_new_best_score: bestScoreRecord.best_attempt_id.toString() === updatedAttempt.id.toString(),
+        best_score: bestScoreRecord.best_score,
+        total_attempts: bestScoreRecord.metadata.total_attempts,
+        achievements: bestScoreRecord.achievements,
+        improvement_streak: bestScoreRecord.metadata.improvement_streak,
+        score_history_count: bestScoreRecord.score_history.length,
+      };
+    }
+    
+    // Include comprehensive data summary
+    if (comprehensiveData) {
+      responseData.data_persistence_summary = {
+        total_backups_created: comprehensiveData.backupCount,
+        has_valid_backups: comprehensiveData.hasValidBackups,
+        latest_backup_time: comprehensiveData.latestBackup?.backup_timestamp || null,
+      };
+    }
+    
+    res.json(responseData);
+  } catch (error) { 
+    console.error('Submit attempt error:', error); 
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to submit attempt') }); 
+  }
 });
 
 // Student: autosave
 router.post('/student/attempts/:attemptId/autosave', verifyToken, hasRole('student'), async (req, res) => {
   try {
     const { attemptId } = req.params;
-    const incomingAnswers = req.body?.answers;
-    const incomingCodingSubmissions = req.body?.codingSubmissions;
+    const { answers: incomingAnswers, codingSubmissions: incomingCodingSubmissions, createBackup = true, ...additionalData } = req.body;
     const sessionToken = getExamSessionToken(req);
+    
     if (!sessionToken) return res.status(400).json({ error: 'Session token is required' });
+    
     const attempt = await AssessmentAttempt.findOne({ _id: attemptId, student_id: req.user.id }).lean();
     if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
     if (attempt.status !== 'in_progress') return res.status(400).json({ error: 'Only in-progress attempts can be autosaved' });
+    
     const activeSession = getAttemptSessionMeta(attempt.answers).token;
     if (activeSession && activeSession !== sessionToken) return res.status(409).json(buildSessionConflictResponse('Active in another session', attempt._id));
+    
     const safeIncoming = (incomingAnswers && typeof incomingAnswers === 'object') ? incomingAnswers : {};
     const safeCoding = (incomingCodingSubmissions && typeof incomingCodingSubmissions === 'object') ? incomingCodingSubmissions : null;
-    const mergedAnswers = { ...(attempt.answers && typeof attempt.answers === 'object' ? attempt.answers : {}), ...safeIncoming, ...(safeCoding !== null ? { [CODING_SUBMISSIONS_META_KEY]: safeCoding } : {}) };
+    const mergedAnswers = { 
+      ...(attempt.answers && typeof attempt.answers === 'object' ? attempt.answers : {}), 
+      ...safeIncoming, 
+      ...(safeCoding !== null ? { [CODING_SUBMISSIONS_META_KEY]: safeCoding } : {}) 
+    };
+    
     const hosted = await HostedAssessment.findById(attempt.hosted_assessment_id).select('duration_minutes').lean();
+    
+    // Create backup before updating if requested
+    let backupResult = null;
+    if (createBackup === 'true') {
+      try {
+        backupResult = await dataPersistenceService.createBackup(attemptId, 'auto_save', {
+          trigger: 'autosave_request',
+          currentQuestionIndex: additionalData.currentQuestionIndex,
+          codingFrameHeight: additionalData.codingFrameHeight,
+          selectedChallengeIndex: additionalData.selectedChallengeIndex,
+          browserInfo: {
+            user_agent: req.headers['user-agent'],
+            screen_resolution: additionalData.screenResolution,
+            timezone: additionalData.timezone,
+            language: additionalData.language,
+          },
+          networkInfo: {
+            is_online: additionalData.isOnline !== false,
+            connection_type: additionalData.connectionType,
+            effective_bandwidth: additionalData.bandwidth,
+          },
+        });
+      } catch (backupError) {
+        console.error('Failed to create backup during autosave:', backupError);
+        // Don't fail the autosave if backup fails
+      }
+    }
+    
     const updated = await AssessmentAttempt.findByIdAndUpdate(attempt._id, { answers: applyAttemptSessionMeta(mergedAnswers, sessionToken) }, { new: true }).lean();
-    res.json({ message: 'Autosaved successfully', autosavedAt: updated.updated_at, remaining_seconds: getRemainingSeconds(updated, hosted), attempt: { id: updated._id, status: updated.status, updated_at: updated.updated_at } });
-  } catch (error) { console.error('Autosave error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to autosave') }); }
+    
+    // Calculate current scores for response
+    let currentScores = null;
+    try {
+      const template = await AssessmentTemplate.findById(hosted.template_id).lean();
+      const questions = template?.template_data?.questions || [];
+      const mcqSummary = calculateAttemptSummary(questions, mergedAnswers, template?.total_marks);
+      const codingSummary = await calculateCodingSummary({
+        codingSection: hosted.coding_section,
+        rawAnswers: mergedAnswers
+      });
+      
+      currentScores = {
+        mcq: {
+          attempted: Object.keys(mergedAnswers).filter(key => !key.startsWith('__')).length,
+          correct: mcqSummary.correctCount,
+          total: mcqSummary.totalQuestions,
+          marks_obtained: mcqSummary.score,
+          total_marks: mcqSummary.totalMarks,
+          percentage: mcqSummary.percentage,
+        },
+        coding: {
+          attempted: codingSummary.attemptedQuestionCount,
+          executed: codingSummary.attemptedQuestionCount,
+          total_test_cases: codingSummary.totalQuestionCount,
+          passed_test_cases: codingSummary.passedQuestionCount,
+          total: codingSummary.totalQuestionCount,
+          marks_obtained: codingSummary.score,
+          total_marks: codingSummary.totalMarks,
+          percentage: codingSummary.totalMarks > 0 ? (codingSummary.score / codingSummary.totalMarks) * 100 : 0,
+        },
+        overall: {
+          total_score: mcqSummary.score + codingSummary.score,
+          total_marks: mcqSummary.totalMarks + codingSummary.totalMarks,
+          percentage: (mcqSummary.totalMarks + codingSummary.totalMarks) > 0 ? 
+            ((mcqSummary.score + codingSummary.score) / (mcqSummary.totalMarks + codingSummary.totalMarks)) * 100 : 0,
+          correct_count: mcqSummary.correctCount + codingSummary.passedQuestionCount,
+          total_questions: mcqSummary.totalQuestions + codingSummary.totalQuestionCount,
+        }
+      };
+    } catch (scoreError) {
+      console.error('Failed to calculate current scores during autosave:', scoreError);
+    }
+    
+    const responseData = {
+      message: 'Autosaved successfully',
+      autosavedAt: updated.updated_at,
+      remaining_seconds: getRemainingSeconds(updated, hosted),
+      attempt: { 
+        id: updated._id, 
+        status: updated.status, 
+        updated_at: updated.updated_at 
+      },
+    };
+    
+    // Include backup information if created
+    if (backupResult) {
+      responseData.backup = {
+        id: backupResult._id,
+        type: backupResult.backup_type,
+        timestamp: backupResult.backup_timestamp,
+        sequence: backupResult.backup_metadata.backup_sequence,
+        data_hash: backupResult.data_hash,
+        computed_scores: backupResult.computed_scores,
+      };
+    }
+    
+    // Include current scores if calculated
+    if (currentScores) {
+      responseData.current_scores = currentScores;
+    }
+    
+    res.json(responseData);
+  } catch (error) { 
+    console.error('Autosave error:', error); 
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to autosave') }); 
+  }
 });
 
 // Student: results
@@ -623,7 +1069,7 @@ router.get('/student/results', verifyToken, hasRole('student'), async (req, res)
     const hostedIds = scopedExams.map(e => e._id);
     let attempts = [];
     if (hostedIds.length > 0) {
-      attempts = await AssessmentAttempt.find({ student_id: req.user.id, hosted_assessment_id: { $in: hostedIds } }).select('_id hosted_assessment_id attempt_number status score total_marks percentage correct_count total_questions submitted_at created_at').sort({ created_at: -1 }).lean();
+      attempts = await AssessmentAttempt.find({ student_id: req.user.id, hosted_assessment_id: { $in: hostedIds } }).select('_id hosted_assessment_id attempt_number status score total_marks percentage correct_count total_questions submitted_at created_at section_results').sort({ created_at: -1 }).lean();
     }
     const attemptsByExam = attempts.reduce((acc, a) => { const k = a.hosted_assessment_id?.toString(); if (!acc[k]) acc[k] = []; acc[k].push({ ...a, id: a._id }); return acc; }, {});
     const now = new Date();
@@ -634,10 +1080,154 @@ router.get('/student/results', verifyToken, hasRole('student'), async (req, res)
       const latestAttempt = submittedAttempts[0] || null;
       const bestAttempt = submittedAttempts.reduce((best, curr) => !best ? curr : (safeNumber(curr.score, 0) > safeNumber(best.score, 0) ? curr : best), null);
       const visible = exam.result_mode === 'immediate' || (exam.result_mode === 'after_end' && exam.end_time && now >= new Date(exam.end_time));
-      return { examId: exam._id, title: exam.exam_title || template?.title || 'Assessment', subject: template?.subject || 'N/A', result_mode: exam.result_mode, start_time: exam.start_time, end_time: exam.end_time, attemptsUsed: examAttempts.length, latestAttempt, bestAttempt, resultVisible: visible };
+      
+      // Add detailed section breakdown for visible results
+      let detailedResults = null;
+      if (visible && bestAttempt && bestAttempt.section_results) {
+        detailedResults = {
+          mcq: {
+            attempted: bestAttempt.section_results.mcq?.attempted || 0,
+            correct: bestAttempt.section_results.mcq?.correct || 0,
+            wrong: bestAttempt.section_results.mcq?.wrong || 0,
+            total: bestAttempt.section_results.mcq?.total || 0,
+            marks_obtained: bestAttempt.section_results.mcq?.marks_obtained || 0,
+            total_marks: bestAttempt.section_results.mcq?.total_marks || 0
+          },
+          coding: bestAttempt.section_results.coding ? {
+            attempted: bestAttempt.section_results.coding.attempted || 0,
+            executed: bestAttempt.section_results.coding.executed || 0,
+            total_test_cases: bestAttempt.section_results.coding.total_test_cases || 0,
+            passed_test_cases: bestAttempt.section_results.coding.passed_test_cases || 0,
+            total: bestAttempt.section_results.coding.total || 0,
+            marks_obtained: bestAttempt.section_results.coding.marks_obtained || 0,
+            total_marks: bestAttempt.section_results.coding.total_marks || 0,
+            challenges: bestAttempt.section_results.coding.challenges || []
+          } : null
+        };
+      }
+      
+      return { 
+        examId: exam._id, 
+        title: exam.exam_title || template?.title || 'Assessment', 
+        subject: template?.subject || 'N/A', 
+        result_mode: exam.result_mode, 
+        start_time: exam.start_time, 
+        end_time: exam.end_time, 
+        attemptsUsed: examAttempts.length, 
+        latestAttempt, 
+        bestAttempt, 
+        resultVisible: visible,
+        detailedResults
+      };
     }));
     res.json({ results });
   } catch (error) { console.error('Student results error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch results') }); }
+});
+
+// Student: detailed result view for specific assessment
+router.get('/student/results/:hostedAssessmentId', verifyToken, hasRole('student'), async (req, res) => {
+  try {
+    const { hostedAssessmentId } = req.params;
+    const { detail: sd, error: se } = await getStudentDetail(req.user.id);
+    if (se || !sd) return res.status(404).json({ error: 'Student details not found' });
+
+    const hostedAssessment = await HostedAssessment.findById(hostedAssessmentId).lean();
+    if (!hostedAssessment) return res.status(404).json({ error: 'Assessment not found' });
+
+    // Check if student is assigned to this assessment
+    const { map: targetMap } = await getStudentTargetMapForHostedExams([hostedAssessmentId]);
+    const tids = (targetMap[hostedAssessmentId] || []).map(i => i.student_id);
+    if (!isExamAssignedToStudent(hostedAssessment, sd, req.user.id, tids)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const attempts = await AssessmentAttempt.find({ 
+      student_id: req.user.id, 
+      hosted_assessment_id: hostedAssessmentId 
+    })
+    .populate('hosted_assessment_id')
+    .sort({ attempt_number: 1 })
+    .lean();
+
+    if (!attempts.length) {
+      return res.status(404).json({ error: 'No attempts found for this assessment' });
+    }
+
+    const template = await AssessmentTemplate.findById(hostedAssessment.template_id).lean();
+    const now = new Date();
+    const visible = hostedAssessment.result_mode === 'immediate' || 
+                   (hostedAssessment.result_mode === 'after_end' && hostedAssessment.end_time && now >= new Date(hostedAssessment.end_time));
+
+    const detailedAttempts = attempts.map(attempt => ({
+      attempt_number: attempt.attempt_number,
+      status: attempt.status,
+      started_at: attempt.started_at,
+      submitted_at: attempt.submitted_at,
+      score: attempt.score,
+      total_marks: attempt.total_marks,
+      percentage: attempt.percentage,
+      section_results: attempt.section_results,
+      overall_status: attempt.percentage >= (template?.passing_percentage || 40) ? 'PASS' : 'FAIL'
+    }));
+
+    res.json({
+      assessment: {
+        id: hostedAssessment._id,
+        title: hostedAssessment.exam_title || template?.title || 'Assessment',
+        subject: template?.subject || 'N/A',
+        result_mode: hostedAssessment.result_mode,
+        start_time: hostedAssessment.start_time,
+        end_time: hostedAssessment.end_time,
+        passing_percentage: template?.passing_percentage || 40
+      },
+      resultVisible: visible,
+      attempts: detailedAttempts
+    });
+  } catch (error) { 
+    console.error('Dashboard analytics error:', error); 
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch dashboard analytics') }); 
+  }
+});
+
+// Calculate and update results for all submitted attempts
+router.post('/calculate-results/:hostedAssessmentId', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
+  try {
+    const { hostedAssessmentId } = req.params;
+    const { calculateAttemptResults } = require('../services/resultCalculationService');
+    
+    const hostedAssessment = await HostedAssessment.findById(hostedAssessmentId).lean();
+    if (!hostedAssessment) return res.status(404).json({ error: 'Assessment not found' });
+    
+    // Check permissions
+    if (req.user.role === 'teacher' && hostedAssessment.host_id.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Get all submitted attempts
+    const attempts = await AssessmentAttempt.find({
+      hosted_assessment_id: hostedAssessmentId,
+      status: { $in: ['submitted', 'auto_submitted'] }
+    }).lean();
+
+    const results = [];
+    for (const attempt of attempts) {
+      try {
+        const result = await calculateAttemptResults(attempt._id);
+        results.push(result);
+      } catch (error) {
+        console.error(`Error calculating result for attempt ${attempt._id}:`, error);
+      }
+    }
+
+    res.json({
+      message: 'Results calculated successfully',
+      processed_attempts: results.length,
+      results
+    });
+  } catch (error) { 
+    console.error('Calculate results error:', error); 
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to calculate results') }); 
+  }
 });
 
 // Student metrics
@@ -660,6 +1250,126 @@ router.get('/metrics/student', verifyToken, hasRole('student'), async (req, res)
     }
     res.json({ assigned: exams.length, inProgress, upcoming, completed });
   } catch (error) { console.error('Student metrics error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch metrics') }); }
+});
+
+// Get exam attempts for monitoring
+router.get('/hosted/:examId/attempts', verifyToken, hasRole('teacher'), async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const exam = await HostedAssessment.findById(examId);
+    if (!exam) return res.status(404).json({ error: 'Exam not found' });
+
+    const attempts = await AssessmentAttempt.find({ hosted_assessment_id: examId })
+      .populate('student_id', 'full_name email roll_number')
+      .sort({ started_at: -1 });
+
+    const attemptsWithProgress = attempts.map(attempt => {
+      const answers = attempt.answers || {};
+      const totalQuestions = exam.template?.template_data?.questions?.length || 0;
+      const answeredQuestions = Object.keys(answers).filter(key => 
+        !key.startsWith('__') && answers[key] !== null && answers[key] !== undefined && answers[key] !== ''
+      ).length;
+      
+      const progressPercentage = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
+
+      return {
+        ...attempt.toObject(),
+        student: attempt.student_id,
+        progress_percentage: progressPercentage,
+        duration_seconds: attempt.started_at && attempt.submitted_at ? 
+          Math.round((new Date(attempt.submitted_at) - new Date(attempt.started_at)) / 1000) : null
+      };
+    });
+
+    res.json({ attempts: attemptsWithProgress });
+  } catch (error) {
+    console.error('Get exam attempts error:', error);
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch attempts') });
+  }
+});
+
+// Get student attempt details
+router.get('/attempts/:attemptId/details', verifyToken, hasRole('teacher'), async (req, res) => {
+  try {
+    const { attemptId } = req.params;
+    const attempt = await AssessmentAttempt.findById(attemptId)
+      .populate('student_id', 'full_name email roll_number')
+      .populate('hosted_assessment_id');
+
+    if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
+
+    const exam = await HostedAssessment.findById(attempt.hosted_assessment_id._id)
+      .populate('template_id');
+
+    const duration = attempt.started_at && attempt.submitted_at ? 
+      Math.round((new Date(attempt.submitted_at) - new Date(attempt.started_at)) / 1000) : null;
+
+    res.json({
+      ...attempt.toObject(),
+      student: attempt.student_id,
+      hosted_assessment: attempt.hosted_assessment_id,
+      exam: exam,
+      duration_seconds: duration
+    });
+  } catch (error) {
+    console.error('Get attempt details error:', error);
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch attempt details') });
+  }
+});
+
+// Force submit attempt (teacher action)
+router.post('/attempts/:attemptId/force-submit', verifyToken, hasRole('teacher'), async (req, res) => {
+  try {
+    const { attemptId } = req.params;
+    const attempt = await AssessmentAttempt.findById(attemptId);
+
+    if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
+    if (attempt.status !== 'in_progress') return res.status(400).json({ error: 'Attempt is not in progress' });
+
+    // Calculate score
+    const exam = await HostedAssessment.findById(attempt.hosted_assessment_id).populate('template_id');
+    if (!exam) return res.status(404).json({ error: 'Associated exam not found' });
+
+    const questions = exam.template?.template_data?.questions || [];
+    let score = 0;
+    let totalMarks = 0;
+
+    questions.forEach((question, index) => {
+      const questionNumber = index + 1;
+      const userAnswer = attempt.answers?.[questionNumber];
+      const correctAnswer = question.correctOptions || question.correctOption;
+      const marks = question.marks || 1;
+      
+      totalMarks += marks;
+
+      if (question.type === 'mcq') {
+        const correctOptions = Array.isArray(correctAnswer) ? correctAnswer : [correctAnswer];
+        const userOptions = Array.isArray(userAnswer) ? userAnswer : [userAnswer];
+        
+        const isCorrect = correctOptions.length === userOptions.length &&
+          correctOptions.every(opt => userOptions.includes(opt));
+        
+        if (isCorrect) score += marks;
+      } else if (question.type === 'blank') {
+        if (userAnswer === correctAnswer) score += marks;
+      }
+    });
+
+    const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 100) : 0;
+
+    await AssessmentAttempt.findByIdAndUpdate(attemptId, {
+      status: 'auto_submitted',
+      submitted_at: new Date(),
+      score,
+      total_marks: totalMarks,
+      percentage
+    });
+
+    res.json({ message: 'Attempt force submitted successfully', score, total_marks: totalMarks, percentage });
+  } catch (error) {
+    console.error('Force submit error:', error);
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to force submit attempt') });
+  }
 });
 
 module.exports = router;

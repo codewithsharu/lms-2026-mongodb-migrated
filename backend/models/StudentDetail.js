@@ -37,5 +37,6 @@ const studentDetailSchema = new mongoose.Schema(
 
 studentDetailSchema.index({ user_id: 1 });
 studentDetailSchema.index({ class_id: 1 });
+studentDetailSchema.index({ user_id: 1, class_id: 1 });
 
 module.exports = mongoose.model('StudentDetail', studentDetailSchema);

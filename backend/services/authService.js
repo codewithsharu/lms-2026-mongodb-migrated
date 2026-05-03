@@ -84,7 +84,9 @@ const verifyRefreshToken = (token) => {
 const authenticateWithPassword = async (email, password) => {
   const normalizedEmail = normalizeEmail(email);
 
-  const user = await User.findOne({ email: normalizedEmail });
+  const user = await User.findOne({ email: normalizedEmail, is_active: true })
+    .select('_id email full_name role is_active password_hash')
+    .lean();
 
   if (!user) {
     throw createAuthError('Invalid email or password', 'INVALID_CREDENTIALS');

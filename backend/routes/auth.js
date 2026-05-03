@@ -51,36 +51,41 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Account is deactivated. Contact administrator.' });
     }
 
-    // Update last login
-    await User.findByIdAndUpdate(user._id, { last_login: new Date() });
+    // Parallelize database operations for faster login
+    const [additionalDetails] = await Promise.all([
+      // Get additional details based on role
+      (async () => {
+        if (user.role === 'student') {
+          const studentData = await StudentDetail.findOne({ user_id: user._id })
+            .populate('class_id', 'id name')
+            .populate('section_id', 'id name')
+            .lean();
 
-    // Get additional details based on role
-    let additionalDetails = null;
+          if (studentData) {
+            return {
+              ...studentData,
+              classes: studentData.class_id,
+              sections: studentData.section_id,
+            };
+          }
+        } else if (user.role === 'teacher') {
+          return await TeacherDetail.findOne({ user_id: user._id }).lean();
+        }
+        return null;
+      })(),
+      // Update last login in background (non-blocking)
+      User.findByIdAndUpdate(user._id, { last_login: new Date() }).lean()
+    ]);
 
-    if (user.role === 'student') {
-      const studentData = await StudentDetail.findOne({ user_id: user._id })
-        .populate('class_id', 'id name')
-        .populate('section_id', 'id name')
-        .lean();
-
-      if (studentData) {
-        additionalDetails = {
-          ...studentData,
-          classes: studentData.class_id,
-          sections: studentData.section_id,
-        };
-      }
-    } else if (user.role === 'teacher') {
-      additionalDetails = await TeacherDetail.findOne({ user_id: user._id }).lean();
-    }
-
-    // Log the login action
-    await logAction(
-      { user: { id: user._id.toString(), email: user.email, role: user.role }, originalUrl: '/api/auth/login', method: 'POST', body: { email }, ip: req.ip, get: (h) => req.get(h) },
-      'LOGIN',
-      'user',
-      user._id.toString()
-    );
+    // Log the login action in background (non-blocking for faster response)
+    setImmediate(() => {
+      logAction(
+        { user: { id: user._id.toString(), email: user.email, role: user.role }, originalUrl: '/api/auth/login', method: 'POST', body: { email }, ip: req.ip, get: (h) => req.get(h) },
+        'LOGIN',
+        'user',
+        user._id.toString()
+      ).catch(err => console.error('Audit log error:', err));
+    });
 
     const expiresInSeconds = Number.parseInt(session.expires_in, 10);
     const accessTokenMaxAgeMs = Number.isFinite(expiresInSeconds) && expiresInSeconds > 0

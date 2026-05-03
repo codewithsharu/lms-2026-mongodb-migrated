@@ -50,7 +50,8 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+userSchema.index({ email: 1, is_active: 1 });
+userSchema.index({ role: 1, is_active: 1 });
 userSchema.index({ email: 1 });
-userSchema.index({ role: 1 });
 
 module.exports = mongoose.model('User', userSchema);

@@ -25,6 +25,9 @@ import TeacherChallengeBrowser from './pages/teacher/ChallengeBrowser';
 import TeacherChallengeBuilder from './pages/teacher/ChallengeBuilder';
 import TeacherChallengeRunner from './pages/teacher/ChallengeRunner';
 import TeacherAnalytics from './pages/teacher/Analytics';
+import ExamMonitoring from './pages/teacher/ExamMonitoring';
+import ExamReports from './pages/teacher/ExamReports';
+import StudentAttemptDetails from './pages/teacher/StudentAttemptDetails';
 import StudentDashboard from './pages/student/Dashboard';
 import StudentAssessments from './pages/student/Assessments';
 import StudentResults from './pages/student/Results';
@@ -224,6 +227,30 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['teacher']}>
                 <TeacherAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/exam-monitoring/:examId"
+            element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <ExamMonitoring />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/exam-reports/:examId"
+            element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <ExamReports />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/exam-monitoring/:examId/attempts/:attemptId"
+            element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <StudentAttemptDetails />
               </ProtectedRoute>
             }
           />

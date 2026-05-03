@@ -176,6 +176,12 @@ export const assessmentAPI = {
     }
   ),
   getStudentResults: () => api.get('/assessments/student/results'),
+
+  // New monitoring and reporting APIs
+  getHostedExam: (examId) => api.get(`/assessments/hosted/${examId}`),
+  getExamAttempts: (examId) => api.get(`/assessments/hosted/${examId}/attempts`),
+  getStudentAttemptDetails: (attemptId) => api.get(`/assessments/attempts/${attemptId}/details`),
+  forceSubmitAttempt: (attemptId) => api.post(`/assessments/attempts/${attemptId}/force-submit`),
 };
 
 export default api;

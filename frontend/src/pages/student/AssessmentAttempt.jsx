@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { FiAlertTriangle, FiCheckCircle, FiClock, FiCode, FiEye, FiEyeOff, FiFlag, FiLock, FiSend, FiShield, FiTarget, FiWifi, FiWifiOff } from 'react-icons/fi';
+import { FiAlertTriangle, FiArrowLeft, FiCheckCircle, FiClock, FiCode, FiEye, FiEyeOff, FiFlag, FiLock, FiSend, FiShield, FiTarget, FiWifi, FiWifiOff } from 'react-icons/fi';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Modal from '../../components/ui/Modal';
@@ -417,12 +417,57 @@ const AssessmentAttempt = () => {
   };
 
   const hydrateAttemptState = (payload) => {
+    // Enhanced validation with detailed logging
+    if (!payload || typeof payload !== 'object') {
+      console.error('Invalid payload provided to hydrateAttemptState:', payload);
+      return false;
+    }
+
     const attempt = payload?.attempt;
     const hostedAssessment = payload?.hostedAssessment;
     const questionList = Array.isArray(payload?.questions) ? payload.questions : [];
 
-    if (!attempt || !hostedAssessment || questionList.length === 0) {
+    // Validate required fields
+    const validationErrors = [];
+    
+    if (!attempt || typeof attempt !== 'object') {
+      validationErrors.push('Missing or invalid attempt data');
+    } else {
+      // Validate critical attempt fields
+      if (!attempt.id && !attempt._id) validationErrors.push('Attempt ID missing');
+      if (!attempt.status) validationErrors.push('Attempt status missing');
+      if (typeof attempt.remaining_seconds !== 'number') validationErrors.push('Invalid remaining time');
+    }
+
+    if (!hostedAssessment || typeof hostedAssessment !== 'object') {
+      validationErrors.push('Missing or invalid hosted assessment data');
+    }
+
+    if (!questionList.length) {
+      validationErrors.push('No questions available');
+    }
+
+    if (validationErrors.length > 0) {
+      console.error('Attempt state validation failed:', validationErrors.join(', '), payload);
       return false;
+    }
+
+    // Validate attempt status for resume scenarios
+    const validStatuses = ['in_progress', 'submitted', 'auto_submitted'];
+    if (!validStatuses.includes(attempt.status)) {
+      console.error('Invalid attempt status for resume:', attempt.status);
+      return false;
+    }
+
+    // Check if attempt is still active for resume
+    if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
+      console.log('Attempt already submitted, showing results');
+    } else if (attempt.status === 'in_progress') {
+      // Check if time is still valid
+      if (attempt.remaining_seconds <= 0) {
+        console.error('Attempt has expired but still marked as in_progress');
+        return false;
+      }
     }
 
     setAttemptData({ attempt, hostedAssessment });
@@ -470,7 +515,7 @@ const AssessmentAttempt = () => {
     );
     setCodingQuestionTotalByChallenge({});
     setSelectedCodingChallengeIndex(0);
-    setTimeLeft(Number(attempt.remaining_seconds || 0));
+    setTimeLeft(Math.max(0, Number(attempt.remaining_seconds || 0)));
     skipNextAutosaveRef.current = true;
 
     if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
@@ -501,13 +546,15 @@ const AssessmentAttempt = () => {
       });
 
       if (!hydrateAttemptState(response.data)) {
-        toast.error('Attempt data not available');
+        const errorMessage = 'Attempt data not available or invalid';
+        toast.error(errorMessage);
         if (!hasBootstrapAttemptRef.current) {
           navigate('/student/assessments');
         }
         return;
       }
     } catch (error) {
+      // Handle session conflict
       if (error.response?.status === 409 && error.response?.data?.sessionConflict) {
         if (shouldAutoTakeoverOnConflict && !forceTakeover) {
           await loadAttempt({ forceTakeover: true, silent });
@@ -522,13 +569,47 @@ const AssessmentAttempt = () => {
         return;
       }
 
-      const fallbackMessage = error.response?.data?.error || 'Failed to load attempt';
+      // Handle various error scenarios with better user feedback
+      let errorMessage = 'Failed to load attempt';
+      let shouldRedirect = true;
 
+      if (error.response?.status === 404) {
+        errorMessage = 'Assessment attempt not found';
+        shouldRedirect = true;
+      } else if (error.response?.status === 400) {
+        const backendMessage = error.response?.data?.error;
+        if (backendMessage?.includes('timed out')) {
+          errorMessage = 'Assessment time has expired';
+        } else if (backendMessage?.includes('submitted')) {
+          errorMessage = 'Assessment has already been submitted';
+        } else if (backendMessage?.includes('Maximum attempts')) {
+          errorMessage = 'Maximum attempts reached';
+        } else {
+          errorMessage = backendMessage || 'Assessment no longer available';
+        }
+        shouldRedirect = true;
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You are not authorized to access this assessment';
+        shouldRedirect = true;
+      } else if (error.code === 'NETWORK_ERROR' || !navigator.onLine) {
+        errorMessage = 'Network connection issue. Please check your internet connection';
+        shouldRedirect = false;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+        shouldRedirect = true;
+      }
+
+      // Show error toast
+      toast.error(errorMessage);
+
+      // Handle navigation logic
       if (!hasBootstrapAttemptRef.current) {
-        toast.error(fallbackMessage);
-        navigate('/student/assessments');
+        if (shouldRedirect) {
+          navigate('/student/assessments');
+        }
+        // If not redirecting (e.g., network error), let the fallback UI handle it
       } else {
-        console.error('Attempt refresh failed, using bootstrap payload:', fallbackMessage);
+        console.error('Attempt refresh failed, using bootstrap payload:', errorMessage);
       }
     } finally {
       if (!silent) {
@@ -564,6 +645,9 @@ const AssessmentAttempt = () => {
 
   useEffect(() => {
     let cancelled = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
 
     const initializeAttempt = async () => {
       if (isPreviewMode) {
@@ -612,12 +696,37 @@ const AssessmentAttempt = () => {
       if (hydrateAttemptState(bootstrapPayload)) {
         hasBootstrapAttemptRef.current = true;
         setLoading(false);
+        // Silent refresh to get latest data
         loadAttemptRef.current?.({ silent: true });
         return;
       }
 
       hasBootstrapAttemptRef.current = false;
-      loadAttemptRef.current?.();
+
+      // Retry mechanism for loading attempts
+      const attemptLoadWithRetry = async () => {
+        while (retryCount < maxRetries && !cancelled) {
+          try {
+            await loadAttemptRef.current?.();
+            break; // Success, exit retry loop
+          } catch (error) {
+            retryCount++;
+            console.error(`Attempt load failed (attempt ${retryCount}/${maxRetries}):`, error);
+            
+            if (retryCount >= maxRetries) {
+              // Final retry failed, show error state
+              console.error('All retry attempts exhausted');
+              toast.error('Failed to load assessment after multiple attempts. Please refresh the page.');
+              break;
+            }
+            
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, retryDelay * retryCount));
+          }
+        }
+      };
+
+      await attemptLoadWithRetry();
     };
 
     initializeAttempt();
@@ -1427,7 +1536,17 @@ const AssessmentAttempt = () => {
         <Card className="mx-auto max-w-3xl">
           <Card.Body className="py-12 text-center">
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <p className="mt-3 text-sm text-slate-500">Loading assessment attempt...</p>
+            <p className="mt-3 text-sm text-slate-500">
+              {!isOnline ? 'Waiting for network connection...' : 'Loading assessment attempt...'}
+            </p>
+            {!isOnline && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                <div className="flex items-center justify-center gap-2">
+                  <FiWifiOff className="h-4 w-4" />
+                  <span>You appear to be offline. Please check your internet connection.</span>
+                </div>
+              </div>
+            )}
           </Card.Body>
         </Card>
       </div>
@@ -1465,7 +1584,49 @@ const AssessmentAttempt = () => {
       );
     }
 
-    return null;
+    // Fallback error state when no attempt data is available
+    return (
+      <div className="min-h-screen bg-slate-100 px-4 py-8">
+        <Card className="mx-auto max-w-2xl">
+          <Card.Header>
+            <h2 className="section-title">Assessment Unavailable</h2>
+          </Card.Header>
+          <Card.Body className="space-y-4">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+              <div className="flex items-start gap-2">
+                <FiAlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <p>
+                  Unable to load this assessment attempt. The attempt may have expired, been submitted, or is no longer available.
+                </p>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <p className="text-sm text-slate-600">
+                This could happen if:
+              </p>
+              <ul className="list-inside list-disc text-sm text-slate-600 space-y-1">
+                <li>The assessment time limit has expired</li>
+                <li>The attempt was already submitted</li>
+                <li>The assessment is no longer active</li>
+                <li>There was a network connection issue</li>
+              </ul>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="secondary" onClick={() => navigate('/student/assessments')}>
+                <FiArrowLeft className="h-4 w-4 mr-2" />
+                Back to Assessments
+              </Button>
+              <Button onClick={() => window.location.reload()}>
+                <FiWifi className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </Card.Body>
+        </Card>
+      </div>
+    );
   }
 
   if (submittedSummary) {

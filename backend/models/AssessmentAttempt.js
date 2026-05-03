@@ -46,6 +46,36 @@ const assessmentAttemptSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Detailed section-wise results
+    section_results: {
+      mcq: {
+        attempted: { type: Number, default: 0 },
+        correct: { type: Number, default: 0 },
+        wrong: { type: Number, default: 0 },
+        total: { type: Number, default: 0 },
+        marks_obtained: { type: Number, default: 0 },
+        total_marks: { type: Number, default: 0 }
+      },
+      coding: {
+        attempted: { type: Number, default: 0 },
+        executed: { type: Number, default: 0 },
+        total_test_cases: { type: Number, default: 0 },
+        passed_test_cases: { type: Number, default: 0 },
+        total: { type: Number, default: 0 },
+        marks_obtained: { type: Number, default: 0 },
+        total_marks: { type: Number, default: 0 },
+        challenges: [{
+          challenge_id: String,
+          attempted: { type: Boolean, default: false },
+          executed: { type: Boolean, default: false },
+          total_test_cases: { type: Number, default: 0 },
+          passed_test_cases: { type: Number, default: 0 },
+          marks_obtained: { type: Number, default: 0 },
+          execution_time: { type: Number, default: 0 },
+          last_submission: { type: Date, default: null }
+        }]
+      }
+    },
     started_at: {
       type: Date,
       default: Date.now,

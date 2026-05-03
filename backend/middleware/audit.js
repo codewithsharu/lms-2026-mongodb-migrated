@@ -79,6 +79,11 @@ const buildRequestContextMetadata = (req) => {
 const shouldSkipAudit = (req) => {
   const cleanUrl = String(req.originalUrl || '').split('?')[0];
 
+  // Skip all read operations (GET requests) - only log write operations
+  if (req.method === 'GET') {
+    return true;
+  }
+
   const excludedExactPaths = [
     '/api/health',
     '/api/db-status',
@@ -102,8 +107,7 @@ const logAction = async (req, actionType, resourceType, resourceId, changes = nu
       req._manualAuditLogged = true;
     }
 
-    const requestContextMetadata = buildRequestContextMetadata(req);
-
+    // Minimal logging for write operations only - skip expensive metadata processing
     const logEntry = {
       user_id: req.user?.id || null,
       user_email: req.user?.email || 'anonymous',
@@ -113,18 +117,13 @@ const logAction = async (req, actionType, resourceType, resourceId, changes = nu
       resource_id: resolveResourceId(req, resourceId),
       api_endpoint: req.originalUrl,
       http_method: req.method,
-      request_body: sanitizeRequestBody(req.body),
-      response_status: req.res?.statusCode || null,
       ip_address: req.ip || req.connection?.remoteAddress,
-      user_agent: req.get('User-Agent'),
       changes: changes,
-      metadata: {
-        ...requestContextMetadata,
-        ...(metadata || {})
-      }
+      created_at: new Date()
     };
 
-    await AuditLog.create(logEntry);
+    // Use insertOne for faster write performance
+    await AuditLog.insertOne(logEntry);
   } catch (error) {
     console.error('Audit log error:', error);
     // Don't throw - audit logging should not break main functionality
