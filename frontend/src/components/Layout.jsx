@@ -1,19 +1,50 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getRoleBadgeClass } from '../utils/uiTheme';
 import { 
   FiHome, FiUsers, FiSettings, FiLogOut, FiMenu, FiX,
-  FiBook, FiClipboard, FiBarChart2, FiUser, FiChevronRight, FiChevronLeft, FiActivity, FiDatabase, FiTerminal, FiMonitor
+  FiBook, FiClipboard, FiBarChart2, FiUser, FiChevronRight, FiChevronLeft, FiActivity, FiDatabase, FiTerminal, FiMonitor,
+  FiBookOpen, FiBriefcase
 } from 'react-icons/fi';
+
+// Avatar options from StudentProfile
+const AVATAR_OPTIONS = [
+  { id: 'male1', gender: 'male', icon: '👨‍💼', color: 'bg-blue-500' },
+  { id: 'male2', gender: 'male', icon: '👨‍🎓', color: 'bg-indigo-500' },
+  { id: 'male3', gender: 'male', icon: '👨‍💻', color: 'bg-purple-500' },
+  { id: 'male4', gender: 'male', icon: '👨‍🏫', color: 'bg-slate-600' },
+  { id: 'female1', gender: 'female', icon: '👩‍💼', color: 'bg-emerald-500' },
+  { id: 'female2', gender: 'female', icon: '👩‍🎓', color: 'bg-pink-500' },
+  { id: 'female3', gender: 'female', icon: '👩‍💻', color: 'bg-rose-500' },
+  { id: 'female4', gender: 'female', icon: '👩‍🏫', color: 'bg-amber-500' },
+];
+
+const DEFAULT_AVATAR = AVATAR_OPTIONS[0];
+
+const getStoredAvatar = (userId) => {
+  const key = `user_avatar_${userId}`;
+  const stored = localStorage.getItem(key);
+  if (stored) {
+    return AVATAR_OPTIONS.find(a => a.id === stored) || DEFAULT_AVATAR;
+  }
+  return DEFAULT_AVATAR;
+};
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const [selectedAvatar, setSelectedAvatar] = useState(DEFAULT_AVATAR);
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user?.id) {
+      setSelectedAvatar(getStoredAvatar(user.id));
+    }
+  }, [user]);
 
   const handleLogout = async () => {
     if (logoutLoading) return;
@@ -238,32 +269,14 @@ const Layout = ({ children }) => {
         ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'}
         lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        {/* Logo */}
-        <div className="h-17 flex items-center justify-between px-4 border-b border-gray-200 bg-white">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-sm">
-              <FiBook className="w-5 h-5 text-white" />
-            </div>
-            {!sidebarCollapsed && (
-            <div>
-              <p className="text-sm font-semibold tracking-wide text-gray-900">EDU LMS</p>
-              <p className="text-[11px] text-gray-500">Learning Platform</p>
-            </div>
-            )}
-          </div>
-          <button 
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
-          >
-            <FiX className="w-5 h-5" />
-          </button>
-        </div>
-
+        
         {/* Navigation */}
         <nav className={`sidebar-nav-scroll flex-1 min-h-0 py-5 space-y-1.5 overflow-y-auto overscroll-contain ${sidebarCollapsed ? 'pl-2 pr-3' : 'pl-3 pr-4'}`}>
-          <p className={`pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 ${sidebarCollapsed ? 'px-2 text-center' : 'px-3'}`}>
-            Navigation
-          </p>
+          {!sidebarCollapsed && (
+            <p className={`pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 px-3`}>
+              Navigation
+            </p>
+          )}
           {navItems.map((item) => {
             const isActive = isItemActive(item.path);
             const Icon = item.icon;
@@ -300,16 +313,41 @@ const Layout = ({ children }) => {
         <div className={`border-t border-gray-200 bg-white ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
           <div className={`rounded-2xl border border-gray-200 bg-gray-50 ${sidebarCollapsed ? 'p-2' : 'p-3'}`}>
             <div className={`mb-3 flex items-center gap-3 ${sidebarCollapsed ? 'justify-center mb-2' : ''}`}>
-              <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center shadow-sm">
-                <span className="text-white font-semibold text-sm">
-                  {user?.full_name?.charAt(0)?.toUpperCase() || 'U'}
-                </span>
-              </div>
               {!sidebarCollapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-800 truncate">{user?.full_name}</p>
-                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+              <div className="flex items-center gap-3">
+                {/* Profile Avatar */}
+                <div className={`w-10 h-10 rounded-full ${selectedAvatar.color} flex items-center justify-center text-2xl shadow-lg`}>
+                  {selectedAvatar.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{user?.full_name}</p>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {user?.role === 'student' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+                        <FiBookOpen className="w-3 h-3" />
+                        Student
+                      </span>
+                    ) : user?.role === 'teacher' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
+                        <FiBriefcase className="w-3 h-3" />
+                        Teacher
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-xs font-medium border border-purple-200">
+                        <FiUser className="w-3 h-3" />
+                        Admin
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
+              )}
+              {sidebarCollapsed && (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center">
+                  <div className={`w-7 h-7 rounded-full ${selectedAvatar.color} flex items-center justify-center text-lg`}>
+                    {selectedAvatar.icon}
+                  </div>
+                </div>
               )}
             </div>
             <button
@@ -382,15 +420,6 @@ const Layout = ({ children }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className={`px-3 py-1 text-xs font-semibold rounded-full ${roleBadgeClass}`}>
-              {user?.role?.toUpperCase()}
-            </span>
-            <div className="hidden md:block text-right">
-              <p className="text-xs text-gray-500">Signed in</p>
-              <p className="text-sm font-medium text-gray-800 truncate max-w-45">{user?.full_name}</p>
-            </div>
-          </div>
         </header>
 
         {/* Page content */}
