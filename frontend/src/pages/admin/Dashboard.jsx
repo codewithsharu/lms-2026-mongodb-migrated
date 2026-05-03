@@ -147,40 +147,7 @@ const AdminDashboard = () => {
           </Card.Body>
         </Card>
 
-        <Card>
-          <Card.Header>
-            <h2 className="section-title">Quick Actions</h2>
-          </Card.Header>
-          <Card.Body>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Link to="/admin/students?action=create">
-                <Button className="w-full justify-between" variant="primary">
-                  <span>Add Student</span>
-                  <FiArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Link to="/admin/teachers?action=create">
-                <Button className="w-full justify-between" variant="secondary">
-                  <span>Add Teacher</span>
-                  <FiArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Link to="/admin/students?action=upload">
-                <Button className="w-full justify-between" variant="primary">
-                  <span>Bulk Students</span>
-                  <FiArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Link to="/admin/classes">
-                <Button className="w-full justify-between" variant="secondary">
-                  <span>Manage Classes</span>
-                  <FiArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-            </div>
-          </Card.Body>
-        </Card>
-      </div>
+              </div>
     </Layout>
   );
 };
