@@ -2,37 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { FiMail, FiHash, FiBook, FiLayers, FiMapPin, FiUsers, FiLoader, FiEdit2, FiX, FiCheck } from 'react-icons/fi';
 import profileApi from '../../services/profileApi';
 
-// 8 Simple icon-based avatar options
-const AVATAR_OPTIONS = [
-  // Male avatars
-  { id: 'male1', gender: 'male', icon: '👨‍💼', color: 'bg-blue-500' },
-  { id: 'male2', gender: 'male', icon: '👨‍🎓', color: 'bg-indigo-500' },
-  { id: 'male3', gender: 'male', icon: '👨‍💻', color: 'bg-purple-500' },
-  { id: 'male4', gender: 'male', icon: '👨‍🏫', color: 'bg-slate-600' },
-  // Female avatars
-  { id: 'female1', gender: 'female', icon: '👩‍💼', color: 'bg-emerald-500' },
-  { id: 'female2', gender: 'female', icon: '👩‍🎓', color: 'bg-pink-500' },
-  { id: 'female3', gender: 'female', icon: '👩‍💻', color: 'bg-rose-500' },
-  { id: 'female4', gender: 'female', icon: '👩‍🏫', color: 'bg-amber-500' },
+// GitHub-style avatar colors
+const AVATAR_COLORS = [
+  'bg-red-500',
+  'bg-orange-500', 
+  'bg-yellow-500',
+  'bg-green-500',
+  'bg-teal-500',
+  'bg-blue-500',
+  'bg-indigo-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-gray-500'
 ];
 
-// Default male avatar
-const DEFAULT_AVATAR = AVATAR_OPTIONS[0];
-
-// Get avatar from localStorage or use default
-const getStoredAvatar = (userId) => {
-  const key = `user_avatar_${userId}`;
-  const stored = localStorage.getItem(key);
-  if (stored) {
-    return AVATAR_OPTIONS.find(a => a.id === stored) || DEFAULT_AVATAR;
-  }
-  return DEFAULT_AVATAR;
+const getAvatarColor = (userId) => {
+  if (!userId) return 'bg-gray-500';
+  const hash = userId.toString().split('').reduce((a, b) => {
+    a = ((a << 5) - a) + b.charCodeAt(0);
+    return a & a;
+  }, 0);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 };
 
-// Save avatar to localStorage
-const storeAvatar = (userId, avatarId) => {
-  const key = `user_avatar_${userId}`;
-  localStorage.setItem(key, avatarId);
+const getInitials = (name) => {
+  if (!name) return '?';
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) {
+    return parts[0].charAt(0).toUpperCase();
+  }
+  return parts[0].charAt(0).toUpperCase() + parts[parts.length - 1].charAt(0).toUpperCase();
 };
 
 // Teacher avatar generator
@@ -45,19 +44,12 @@ const StudentProfile = ({ studentId }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedAvatar, setSelectedAvatar] = useState(DEFAULT_AVATAR);
-  const [showAvatarSelector, setShowAvatarSelector] = useState(false);
 
   useEffect(() => {
     loadProfile();
   }, [studentId]);
 
-  useEffect(() => {
-    if (profile?.user?.id) {
-      setSelectedAvatar(getStoredAvatar(profile.user.id));
-    }
-  }, [profile]);
-
+  
   const loadProfile = async () => {
     try {
       setLoading(true);
@@ -74,14 +66,7 @@ const StudentProfile = ({ studentId }) => {
     }
   };
 
-  const handleAvatarSelect = (avatar) => {
-    setSelectedAvatar(avatar);
-    if (profile?.user?.id) {
-      storeAvatar(profile.user.id, avatar.id);
-    }
-    setShowAvatarSelector(false);
-  };
-
+  
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -116,18 +101,11 @@ const StudentProfile = ({ studentId }) => {
         {/* Header with gradient */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5">
           <div className="flex items-center gap-4">
-            {/* Avatar with edit button */}
+            {/* Avatar */}
             <div className="relative">
-              <div className={`w-16 h-16 rounded-full border-3 border-white shadow-lg ${selectedAvatar.color} flex items-center justify-center text-2xl`}>
-                {selectedAvatar.icon}
+              <div className={`w-16 h-16 rounded-full border-3 border-white shadow-lg ${getAvatarColor(profile?.user?.id)} flex items-center justify-center text-white font-semibold text-lg`}>
+                {getInitials(profile?.user?.full_name)}
               </div>
-              <button
-                onClick={() => setShowAvatarSelector(true)}
-                className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-                title="Change Profile Picture"
-              >
-                <FiEdit2 className="w-3.5 h-3.5 text-slate-600" />
-              </button>
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">{user.full_name}</h1>
@@ -189,49 +167,7 @@ const StudentProfile = ({ studentId }) => {
         </div>
       </div>
 
-      {/* Avatar Selector Modal */}
-      {showAvatarSelector && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full">
-            <div className="flex items-center justify-between p-3 border-b border-slate-200">
-              <h2 className="font-semibold text-slate-900 text-sm">Choose Avatar</h2>
-              <button 
-                onClick={() => setShowAvatarSelector(false)}
-                className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <FiX className="w-4 h-4 text-slate-500" />
-              </button>
-            </div>
-            <div className="p-3">
-              <div className="grid grid-cols-4 gap-2">
-                {AVATAR_OPTIONS.map((avatar) => (
-                  <button
-                    key={avatar.id}
-                    onClick={() => handleAvatarSelect(avatar)}
-                    className={`relative p-2 rounded-lg border-2 transition-all hover:scale-105 ${
-                      selectedAvatar.id === avatar.id 
-                        ? avatar.gender === 'male' ? 'border-blue-500 bg-blue-50' : 'border-pink-500 bg-pink-50'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className={`w-full aspect-square rounded-full ${avatar.color} flex items-center justify-center text-xl`}>
-                      {avatar.icon}
-                    </div>
-                    {selectedAvatar.id === avatar.id && (
-                      <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${
-                        avatar.gender === 'male' ? 'bg-blue-500' : 'bg-pink-500'
-                      }`}>
-                        <FiCheck className="w-2.5 h-2.5 text-white" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
+      
       {/* Teachers Card */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">

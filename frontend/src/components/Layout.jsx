@@ -8,43 +8,45 @@ import {
   FiBookOpen, FiBriefcase
 } from 'react-icons/fi';
 
-// Avatar options from StudentProfile
-const AVATAR_OPTIONS = [
-  { id: 'male1', gender: 'male', icon: '👨‍💼', color: 'bg-blue-500' },
-  { id: 'male2', gender: 'male', icon: '👨‍🎓', color: 'bg-indigo-500' },
-  { id: 'male3', gender: 'male', icon: '👨‍💻', color: 'bg-purple-500' },
-  { id: 'male4', gender: 'male', icon: '👨‍🏫', color: 'bg-slate-600' },
-  { id: 'female1', gender: 'female', icon: '👩‍💼', color: 'bg-emerald-500' },
-  { id: 'female2', gender: 'female', icon: '👩‍🎓', color: 'bg-pink-500' },
-  { id: 'female3', gender: 'female', icon: '👩‍💻', color: 'bg-rose-500' },
-  { id: 'female4', gender: 'female', icon: '👩‍🏫', color: 'bg-amber-500' },
+// GitHub-style avatar colors
+const AVATAR_COLORS = [
+  'bg-red-500',
+  'bg-orange-500', 
+  'bg-yellow-500',
+  'bg-green-500',
+  'bg-teal-500',
+  'bg-blue-500',
+  'bg-indigo-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-gray-500'
 ];
 
-const DEFAULT_AVATAR = AVATAR_OPTIONS[0];
+const getAvatarColor = (userId) => {
+  if (!userId) return 'bg-gray-500';
+  const hash = userId.toString().split('').reduce((a, b) => {
+    a = ((a << 5) - a) + b.charCodeAt(0);
+    return a & a;
+  }, 0);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
 
-const getStoredAvatar = (userId) => {
-  const key = `user_avatar_${userId}`;
-  const stored = localStorage.getItem(key);
-  if (stored) {
-    return AVATAR_OPTIONS.find(a => a.id === stored) || DEFAULT_AVATAR;
+const getInitials = (name) => {
+  if (!name) return '?';
+  const parts = name.trim().split(' ');
+  if (parts.length === 1) {
+    return parts[0].charAt(0).toUpperCase();
   }
-  return DEFAULT_AVATAR;
+  return parts[0].charAt(0).toUpperCase() + parts[parts.length - 1].charAt(0).toUpperCase();
 };
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
-  const [selectedAvatar, setSelectedAvatar] = useState(DEFAULT_AVATAR);
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (user?.id) {
-      setSelectedAvatar(getStoredAvatar(user.id));
-    }
-  }, [user]);
 
   const handleLogout = async () => {
     if (logoutLoading) return;
@@ -316,8 +318,8 @@ const Layout = ({ children }) => {
               {!sidebarCollapsed && (
               <div className="flex items-center gap-3">
                 {/* Profile Avatar */}
-                <div className={`w-10 h-10 rounded-full ${selectedAvatar.color} flex items-center justify-center text-2xl shadow-lg`}>
-                  {selectedAvatar.icon}
+                <div className={`w-10 h-10 rounded-full ${getAvatarColor(user?.id)} flex items-center justify-center text-white font-semibold text-sm shadow-lg`}>
+                  {getInitials(user?.full_name)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800 truncate">{user?.full_name}</p>
@@ -343,10 +345,8 @@ const Layout = ({ children }) => {
               </div>
               )}
               {sidebarCollapsed && (
-                <div className="w-8 h-8 rounded-full flex items-center justify-center">
-                  <div className={`w-7 h-7 rounded-full ${selectedAvatar.color} flex items-center justify-center text-lg`}>
-                    {selectedAvatar.icon}
-                  </div>
+                <div className={`w-7 h-7 rounded-full ${getAvatarColor(user?.id)} flex items-center justify-center text-white font-semibold text-xs`}>
+                  {getInitials(user?.full_name)}
                 </div>
               )}
             </div>
