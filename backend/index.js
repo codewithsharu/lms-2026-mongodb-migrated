@@ -49,9 +49,14 @@ const allowedOrigins = parseCsvEnv(process.env.FRONTEND_URLS || process.env.FRON
 const allowedOriginPatternInputs = parseCsvEnv(process.env.FRONTEND_URL_PATTERNS);
 const allowedOriginPatterns = allowedOriginPatternInputs.map(wildcardPatternToRegex);
 
-const corsOriginAllowList = allowedOrigins.length > 0
-  ? allowedOrigins
-  : defaultAllowedOrigins;
+const corsOriginAllowList = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5175',
+  'http://127.0.0.1:5175',
+  'https://lms-2026-pi.vercel.app',
+  'https://lms-2026-mongodb-migrated.vercel.app'
+];
 
 const corsOriginPatternAllowList = allowedOriginPatterns.length > 0
   ? allowedOriginPatterns
