@@ -41,14 +41,7 @@ const UserManagement = ({ fixedRole = '' }) => {
   const isStudentManagement = fixedRole === 'student';
   const isTeacherManagement = fixedRole === 'teacher';
   const [studentTab, setStudentTab] = useState('assigned');
-  const [selectedUserIds, setSelectedUserIds] = useState([]);
-  const [showAssignStudentsModal, setShowAssignStudentsModal] = useState(false);
-  const [assignTargetIds, setAssignTargetIds] = useState([]);
-  const [assignFormData, setAssignFormData] = useState({ class_id: '', section_id: '', zone: '' });
-  const [assignSections, setAssignSections] = useState([]);
-  const [assignLoading, setAssignLoading] = useState(false);
-  const [deleteMode, setDeleteMode] = useState('single');
-  const [deleteLoading, setDeleteLoading] = useState(false);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(searchParams.get('action') === 'create');
   const [showUploadModal, setShowUploadModal] = useState(searchParams.get('action') === 'upload');
@@ -103,17 +96,7 @@ const UserManagement = ({ fixedRole = '' }) => {
   const activeRoleFilter = fixedRole || roleFilter;
   const activeStudentTab = isStudentManagement ? studentTab : '';
   const isUnassignedStudentsTab = isStudentManagement && studentTab === 'unassigned';
-  const supportsBulkSelection = isStudentManagement || isTeacherManagement;
-  const tableColumnCount = supportsBulkSelection ? 6 : 5;
-  const selectedUsersCount = selectedUserIds.length;
-  const selectedUsers = users.filter((user) => selectedUserIds.includes(user.id));
-  const selectedActiveTeachersCount = isTeacherManagement
-    ? selectedUsers.filter((user) => user.is_active).length
-    : 0;
-  const selectedInactiveTeachersCount = isTeacherManagement
-    ? selectedUsers.filter((user) => !user.is_active).length
-    : 0;
-  const allCurrentUsersSelected = users.length > 0 && users.every((user) => selectedUserIds.includes(user.id));
+  const tableColumnCount = 5;
 
   const entityLabel = fixedRole === 'student' ? 'Student' : fixedRole === 'teacher' ? 'Teacher' : 'User';
   const entityPluralLabel = fixedRole === 'student' ? 'Students' : fixedRole === 'teacher' ? 'Teachers' : 'Users';
@@ -187,7 +170,6 @@ const UserManagement = ({ fixedRole = '' }) => {
       const fetchedUsers = response.data?.users || [];
 
       setUsers(fetchedUsers);
-      setSelectedUserIds((previousIds) => previousIds.filter((id) => fetchedUsers.some((user) => user.id === id)));
       setPagination(response.data?.pagination || { page: 1, total: 0, totalPages: 0 });
     } catch {
       toast.error('Failed to fetch users');
@@ -231,137 +213,11 @@ const UserManagement = ({ fixedRole = '' }) => {
     if (!isStudentManagement || tab === studentTab) return;
 
     setStudentTab(tab);
-    setSelectedUserIds([]);
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
-  const handleToggleUserSelection = (userId) => {
-    setSelectedUserIds((currentIds) => {
-      if (currentIds.includes(userId)) {
-        return currentIds.filter((id) => id !== userId);
-      }
 
-      return [...currentIds, userId];
-    });
-  };
-
-  const handleToggleSelectAllUsers = () => {
-    if (allCurrentUsersSelected) {
-      setSelectedUserIds([]);
-      return;
-    }
-
-    setSelectedUserIds(users.map((user) => user.id));
-  };
-
-  const openAssignSelectedModal = (targetUserIds = selectedUserIds) => {
-    const resolvedTargetIds = Array.isArray(targetUserIds) ? targetUserIds : selectedUserIds;
-    const uniqueTargetIds = Array.from(new Set(resolvedTargetIds.filter(Boolean)));
-
-    if (classesLoading) {
-      toast.error('Please wait while classes are loading');
-      return;
-    }
-
-    if (!hasAvailableClasses) {
-      toast.error('Create an active class before assigning students');
-      return;
-    }
-
-    if (uniqueTargetIds.length === 0) {
-      toast.error('Select at least one student to assign');
-      return;
-    }
-
-    setSelectedUserIds(uniqueTargetIds);
-    setAssignTargetIds(uniqueTargetIds);
-    setAssignFormData({ class_id: '', section_id: '', zone: '' });
-    setAssignSections([]);
-    setShowAssignStudentsModal(true);
-  };
-
-  const closeAssignSelectedModal = () => {
-    setShowAssignStudentsModal(false);
-    setAssignTargetIds([]);
-    setAssignFormData({ class_id: '', section_id: '', zone: '' });
-    setAssignSections([]);
-  };
-
-  const handleAssignClassChange = async (classId) => {
-    setAssignFormData((prev) => ({ ...prev, class_id: classId, section_id: '' }));
-
-    if (!classId) {
-      setAssignSections([]);
-      return;
-    }
-
-    try {
-      const response = await classAPI.getSections(classId);
-      setAssignSections(response.data || []);
-    } catch {
-      setAssignSections([]);
-      toast.error('Failed to load class sections');
-    }
-  };
-
-  const handleAssignStudents = async (e) => {
-    e.preventDefault();
-
-    if (!assignFormData.class_id) {
-      toast.error('Class is required for assignment');
-      return;
-    }
-
-    if (assignTargetIds.length === 0) {
-      toast.error('No students selected for assignment');
-      return;
-    }
-
-    setAssignLoading(true);
-
-    try {
-      const payload = {
-        class_id: assignFormData.class_id,
-        section_id: assignFormData.section_id || null,
-        zone: assignFormData.zone || null
-      };
-
-      const results = await Promise.allSettled(
-        assignTargetIds.map((userId) => userAPI.update(userId, payload))
-      );
-
-      const successCount = results.filter((result) => result.status === 'fulfilled').length;
-      const failedCount = results.length - successCount;
-
-      if (successCount > 0) {
-        toast.success(`Assigned ${successCount} student${successCount === 1 ? '' : 's'} successfully`);
-      }
-
-      if (failedCount > 0) {
-        const firstError = results.find((result) => result.status === 'rejected')?.reason?.response?.data?.error;
-        toast.error(firstError ? `${failedCount} failed: ${firstError}` : `${failedCount} assignment(s) failed`);
-      }
-
-      if (successCount > 0) {
-        setSelectedUserIds([]);
-        closeAssignSelectedModal();
-        await fetchUsers();
-      }
-    } finally {
-      setAssignLoading(false);
-    }
-  };
-
-  const openBulkDeleteModal = () => {
-    if (selectedUserIds.length === 0) {
-      toast.error(`Select at least one ${entityLabel.toLowerCase()} to delete`);
-      return;
-    }
-
-    setDeleteMode('bulk');
-    setSelectedUser(null);
-    setShowDeleteModal(true);
-  };
+  
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -402,71 +258,6 @@ const UserManagement = ({ fixedRole = '' }) => {
   };
 
   const handleDeleteUser = async () => {
-    if (deleteMode === 'bulk') {
-      if (selectedUserIds.length === 0) return;
-
-      try {
-        setDeleteLoading(true);
-
-        if (isTeacherManagement) {
-          const selectedTeachers = users.filter((user) => selectedUserIds.includes(user.id));
-          const activeTeachers = selectedTeachers.filter((teacher) => teacher.is_active);
-          const inactiveTeachers = selectedTeachers.filter((teacher) => !teacher.is_active);
-
-          const deactivateResults = await Promise.allSettled(
-            activeTeachers.map((teacher) => userAPI.update(teacher.id, { is_active: false }))
-          );
-          const deleteResults = await Promise.allSettled(
-            inactiveTeachers.map((teacher) => userAPI.delete(teacher.id))
-          );
-
-          const deactivatedCount = deactivateResults.filter((result) => result.status === 'fulfilled').length;
-          const deletedCount = deleteResults.filter((result) => result.status === 'fulfilled').length;
-          const deactivateFailedCount = deactivateResults.length - deactivatedCount;
-          const deleteFailedCount = deleteResults.length - deletedCount;
-          const totalFailed = deactivateFailedCount + deleteFailedCount;
-
-          if (deactivatedCount > 0) {
-            toast.success(`Marked ${deactivatedCount} teacher${deactivatedCount === 1 ? '' : 's'} as inactive`);
-          }
-
-          if (deletedCount > 0) {
-            toast.success(`Deleted ${deletedCount} inactive teacher${deletedCount === 1 ? '' : 's'}`);
-          }
-
-          if (totalFailed > 0) {
-            const firstError = [...deactivateResults, ...deleteResults].find((result) => result.status === 'rejected')
-              ?.reason?.response?.data?.error;
-            toast.error(firstError ? `${totalFailed} action(s) failed: ${firstError}` : `${totalFailed} action(s) failed`);
-          }
-        } else {
-          const results = await Promise.allSettled(selectedUserIds.map((userId) => userAPI.delete(userId)));
-          const successCount = results.filter((result) => result.status === 'fulfilled').length;
-          const failedCount = results.length - successCount;
-
-          if (successCount > 0) {
-            toast.success(`Deleted ${successCount} ${successCount === 1 ? 'user' : 'users'} successfully`);
-          }
-
-          if (failedCount > 0) {
-            const firstError = results.find((result) => result.status === 'rejected')?.reason?.response?.data?.error;
-            toast.error(firstError ? `${failedCount} failed: ${firstError}` : `${failedCount} delete action(s) failed`);
-          }
-        }
-
-        setShowDeleteModal(false);
-        setSelectedUserIds([]);
-        setDeleteMode('single');
-        await fetchUsers();
-      } catch (error) {
-        toast.error(error.response?.data?.error || 'Failed to process selected users');
-      } finally {
-        setDeleteLoading(false);
-      }
-
-      return;
-    }
-
     if (!selectedUser) return;
 
     try {
@@ -475,7 +266,6 @@ const UserManagement = ({ fixedRole = '' }) => {
       toast.success(`${entityLabel} deleted successfully`);
       setShowDeleteModal(false);
       setSelectedUser(null);
-      setDeleteMode('single');
       await fetchUsers();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to delete user');
@@ -797,58 +587,27 @@ const UserManagement = ({ fixedRole = '' }) => {
               <p className="body-sm">{pagination.total} total records</p>
             </div>
 
-            {supportsBulkSelection && (
+            {isStudentManagement && (
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                {isStudentManagement && (
-                  <div className="inline-flex w-fit rounded-lg border border-slate-200 bg-white p-1">
-                    <button
-                      type="button"
-                      onClick={() => handleStudentTabChange('assigned')}
-                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                        studentTab === 'assigned' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      Assigned Students
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStudentTabChange('unassigned')}
-                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                        studentTab === 'unassigned' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      Unassigned Students
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-slate-600">
-                    {isTeacherManagement
-                      ? 'Select one or more teachers to use bulk actions.'
-                      : 'Select one or more students to use bulk actions.'}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-slate-600">{selectedUsersCount} selected</span>
-
-                    {isUnassignedStudentsTab && (
-                      <Button variant="secondary" onClick={() => openAssignSelectedModal()} disabled={selectedUsersCount === 0}>
-                        <FiLayers className="h-4 w-4" />
-                        Assign Selected
-                      </Button>
-                    )}
-
-                    <Button
-                      variant="secondary"
-                      className="!border-red-200 !text-red-600 hover:!bg-red-50"
-                      onClick={openBulkDeleteModal}
-                      disabled={selectedUsersCount === 0}
-                    >
-                      <FiTrash2 className="h-4 w-4" />
-                      Delete Selected
-                    </Button>
-                  </div>
+                <div className="inline-flex w-fit rounded-lg border border-slate-200 bg-white p-1">
+                  <button
+                    type="button"
+                    onClick={() => handleStudentTabChange('assigned')}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                      studentTab === 'assigned' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Assigned Students
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStudentTabChange('unassigned')}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                      studentTab === 'unassigned' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Unassigned Students
+                  </button>
                 </div>
               </div>
             )}
@@ -857,18 +616,7 @@ const UserManagement = ({ fixedRole = '' }) => {
               <table>
                 <thead>
                   <tr>
-                    {supportsBulkSelection && (
-                      <th className="w-12">
-                        <input
-                          type="checkbox"
-                          checked={allCurrentUsersSelected}
-                          onChange={handleToggleSelectAllUsers}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                          aria-label={`Select all visible ${entityPluralLabel.toLowerCase()}`}
-                        />
-                      </th>
-                    )}
-                    <th>User</th>
+                                        <th>User</th>
                     <th>Role</th>
                     <th>Details</th>
                     <th>Status</th>
@@ -879,11 +627,6 @@ const UserManagement = ({ fixedRole = '' }) => {
                   {loading ? (
                     [...Array(5)].map((_, i) => (
                       <tr key={i}>
-                        {supportsBulkSelection && (
-                          <td>
-                            <div className="h-5 w-5 animate-pulse rounded bg-slate-100" />
-                          </td>
-                        )}
                         <td>
                           <div className="h-5 w-40 animate-pulse rounded bg-slate-100" />
                         </td>
@@ -904,17 +647,6 @@ const UserManagement = ({ fixedRole = '' }) => {
                   ) : users.length > 0 ? (
                     users.map((user) => (
                       <tr key={user.id} className="align-top">
-                        {supportsBulkSelection && (
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={selectedUserIds.includes(user.id)}
-                              onChange={() => handleToggleUserSelection(user.id)}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                              aria-label={`Select ${user.full_name}`}
-                            />
-                          </td>
-                        )}
                         <td>
                           <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
@@ -939,16 +671,6 @@ const UserManagement = ({ fixedRole = '' }) => {
                         </td>
                         <td>
                           <div className="flex items-start justify-end gap-2">
-                            {isUnassignedStudentsTab && (
-                              <Button
-                                variant="secondary"
-                                className="!h-9 !px-3"
-                                onClick={() => openAssignSelectedModal([user.id])}
-                              >
-                                <FiLayers className="h-4 w-4" />
-                                Assign
-                              </Button>
-                            )}
                             <Button variant="secondary" className="!h-9 !w-9 !p-0" onClick={() => openEditModal(user)}>
                               <FiEdit2 className="h-[15px] w-[15px]" />
                             </Button>
@@ -959,7 +681,6 @@ const UserManagement = ({ fixedRole = '' }) => {
                               variant="secondary"
                               className="!h-9 !w-9 !p-0 !border-red-200 !text-red-600 hover:!bg-red-50"
                               onClick={() => {
-                                setDeleteMode('single');
                                 setSelectedUser(user);
                                 setShowDeleteModal(true);
                               }}
@@ -1426,72 +1147,7 @@ const UserManagement = ({ fixedRole = '' }) => {
         )}
       </Modal>
 
-      <Modal
-        open={showAssignStudentsModal}
-        onClose={() => {
-          if (assignLoading) return;
-          closeAssignSelectedModal();
-        }}
-        title="Assign Selected Students"
-        subtitle={`Assign class, section, and zone to ${assignTargetIds.length} selected student(s).`}
-        maxWidth="max-w-lg"
-        footer={
-          <div className="flex gap-3">
-            <Button variant="secondary" className="w-full" onClick={closeAssignSelectedModal} disabled={assignLoading}>
-              Cancel
-            </Button>
-            <Button type="submit" form="assign-students-form" className="w-full" disabled={assignLoading || assignTargetIds.length === 0}>
-              {assignLoading ? 'Assigning...' : 'Assign Students'}
-            </Button>
-          </div>
-        }
-      >
-        <form id="assign-students-form" onSubmit={handleAssignStudents} className="space-y-4">
-          <SelectField
-            label="Class *"
-            required
-            value={assignFormData.class_id}
-            onChange={(e) => handleAssignClassChange(e.target.value)}
-            disabled={classesLoading || !hasAvailableClasses || assignLoading}
-          >
-            <option value="">{classesLoading ? 'Loading classes...' : 'Select Class'}</option>
-            {classes.map((cls) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.name}
-              </option>
-            ))}
-          </SelectField>
-
-          <SelectField
-            label="Section"
-            value={assignFormData.section_id}
-            onChange={(e) => setAssignFormData((prev) => ({ ...prev, section_id: e.target.value }))}
-            disabled={!assignFormData.class_id || assignLoading}
-          >
-            <option value="">Select Section</option>
-            {assignSections.map((section) => (
-              <option key={section.id} value={section.id}>
-                {section.name}
-              </option>
-            ))}
-          </SelectField>
-
-          <SelectField
-            label="Zone"
-            value={assignFormData.zone}
-            onChange={(e) => setAssignFormData((prev) => ({ ...prev, zone: e.target.value }))}
-            disabled={assignLoading}
-          >
-            <option value="">Select Zone</option>
-            {zones.map((zone) => (
-              <option key={zone.value} value={zone.value}>
-                {zone.label}
-              </option>
-            ))}
-          </SelectField>
-        </form>
-      </Modal>
-
+      
       <Modal
         open={showResetPasswordModal && !!selectedUser}
         onClose={closeResetPasswordModal}
@@ -1526,22 +1182,13 @@ const UserManagement = ({ fixedRole = '' }) => {
       </Modal>
 
       <Modal
-        open={showDeleteModal && (deleteMode === 'bulk' || !!selectedUser)}
+        open={showDeleteModal && !!selectedUser}
         onClose={() => {
           setShowDeleteModal(false);
           setSelectedUser(null);
-          setDeleteMode('single');
         }}
-        title={
-          deleteMode === 'bulk'
-            ? (isTeacherManagement ? 'Manage Selected Teachers' : 'Delete Selected Users')
-            : `Delete ${entityLabel}`
-        }
-        subtitle={
-          deleteMode === 'bulk' && isTeacherManagement
-            ? 'Active teachers will be changed to inactive. Inactive teachers will be deleted.'
-            : 'This action is permanent and cannot be undone.'
-        }
+        title={`Delete ${entityLabel}`}
+        subtitle="This action is permanent and cannot be undone."
         maxWidth="max-w-md"
         footer={
           <div className="flex gap-3">
@@ -1552,43 +1199,20 @@ const UserManagement = ({ fixedRole = '' }) => {
               onClick={() => {
                 setShowDeleteModal(false);
                 setSelectedUser(null);
-                setDeleteMode('single');
               }}
             >
               Cancel
             </Button>
             <Button variant="danger" className="w-full" onClick={handleDeleteUser} disabled={deleteLoading}>
-              {deleteLoading
-                ? (deleteMode === 'bulk' && isTeacherManagement ? 'Processing...' : 'Deleting...')
-                : (deleteMode === 'bulk' && isTeacherManagement ? 'Apply Bulk Action' : 'Delete')}
+              {deleteLoading ? 'Deleting...' : 'Delete'}
             </Button>
           </div>
         }
       >
-        {deleteMode === 'bulk' ? (
-          isTeacherManagement ? (
-            <div className="space-y-2 text-sm text-slate-600">
-              <p>
-                Selected teachers: <span className="font-semibold text-slate-800">{selectedUsersCount}</span>
-              </p>
-              <p>
-                Active to deactivate: <span className="font-semibold text-slate-800">{selectedActiveTeachersCount}</span>
-              </p>
-              <p>
-                Inactive to delete: <span className="font-semibold text-slate-800">{selectedInactiveTeachersCount}</span>
-              </p>
-            </div>
-          ) : (
-            <p className="text-sm text-slate-600">
-              Are you sure you want to delete <span className="font-semibold text-slate-800">{selectedUsersCount}</span> selected users?
-            </p>
-          )
-        ) : (
-          selectedUser && (
-            <p className="text-sm text-slate-600">
-              Are you sure you want to delete <span className="font-semibold text-slate-800">{selectedUser.full_name}</span>?
-            </p>
-          )
+        {selectedUser && (
+          <p className="text-sm text-slate-600">
+            Are you sure you want to delete <span className="font-semibold text-slate-800">{selectedUser.full_name}</span>?
+          </p>
         )}
       </Modal>
     </Layout>

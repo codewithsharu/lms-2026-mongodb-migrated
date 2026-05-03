@@ -83,6 +83,11 @@ export const classAPI = {
     });
   },
   removeAssignment: (assignmentId) => api.delete(`/classes/assignments/${assignmentId}`),
+  
+  // Student management
+  getStudents: (classId, params = {}) => api.get(`/classes/${classId}/students`, { params }),
+  updateStudentZone: (studentId, data) => api.put(`/classes/students/${studentId}/zone`, data),
+  deleteStudent: (classId, studentId) => api.delete(`/classes/${classId}/students/${studentId}`),
 };
 
 export const teacherAPI = {

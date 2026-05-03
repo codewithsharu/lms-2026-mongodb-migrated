@@ -1,13 +1,36 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute';
+
+// Intercept toast to show only one at a time
+let currentToastId = null;
+const originalToast = { ...toast };
+
+['success', 'error', 'loading'].forEach(method => {
+  toast[method] = (message, options = {}) => {
+    if (currentToastId) {
+      originalToast.dismiss(currentToastId);
+    }
+    currentToastId = originalToast[method](message, options);
+    return currentToastId;
+  };
+});
+
+toast.dismiss = (id) => {
+  if (!id || id === currentToastId) {
+    currentToastId = null;
+  }
+  return originalToast.dismiss(id);
+};
 
 // Pages
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
 import UserManagement from './pages/admin/UserManagement';
 import ClassManagement from './pages/admin/ClassManagement';
+import ClassSections from './pages/admin/ClassSections';
+import ClassSectionStudents from './pages/admin/ClassSectionStudents';
 import AuditLogs from './pages/admin/AuditLogs';
 import AdminAnalytics from './pages/admin/Analytics';
 import HealthCheck from './pages/admin/HealthCheck';
@@ -25,14 +48,17 @@ import TeacherChallengeBrowser from './pages/teacher/ChallengeBrowser';
 import TeacherChallengeBuilder from './pages/teacher/ChallengeBuilder';
 import TeacherChallengeRunner from './pages/teacher/ChallengeRunner';
 import TeacherAnalytics from './pages/teacher/Analytics';
+import TeacherProfile from './pages/teacher/Profile';
 import ExamMonitoring from './pages/teacher/ExamMonitoring';
 import ExamReports from './pages/teacher/ExamReports';
+import NotFound from './pages/NotFound';
 import StudentAttemptDetails from './pages/teacher/StudentAttemptDetails';
 import StudentDashboard from './pages/student/Dashboard';
 import StudentAssessments from './pages/student/Assessments';
 import StudentResults from './pages/student/Results';
 import StudentAssessmentInstructions from './pages/student/AssessmentInstructions';
 import StudentAssessmentAttempt from './pages/student/AssessmentAttempt';
+import StudentProfile from './pages/student/Profile';
 import ChallengeRunner from './pages/compiler/ChallengeRunner';
 import UnderDevelopment from './pages/UnderDevelopment';
 
@@ -89,6 +115,22 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <ClassManagement />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/classes/:classId/sections" 
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <ClassSections />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/classes/:classId/sections/:sectionId/students" 
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <ClassSectionStudents />
               </ProtectedRoute>
             } 
           />
@@ -227,6 +269,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['teacher']}>
                 <TeacherAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/profile"
+            element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherProfile />
               </ProtectedRoute>
             }
           />
@@ -374,20 +424,21 @@ function App() {
             path="/student/profile"
             element={
               <ProtectedRoute allowedRoles={['student']}>
-                <UnderDevelopment title="Student Profile" description="Profile page is under development." />
+                <StudentProfile />
               </ProtectedRoute>
             }
           />
 
           {/* Default redirect */}
           <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
       
       {/* Toast notifications */}
       <Toaster 
         position="top-right"
+        gutter={8}
         toastOptions={{
           duration: 4000,
           style: {
@@ -399,6 +450,9 @@ function App() {
             padding: '12px 14px',
             fontSize: '14px',
             fontWeight: 500,
+          },
+          loading: {
+            duration: Infinity,
           },
           success: {
             style: {

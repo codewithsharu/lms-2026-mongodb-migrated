@@ -61,6 +61,34 @@ const StudentAssessments = () => {
     }
   };
 
+  const handleResumeClick = async (exam) => {
+    try {
+      // Mark exam as resuming to disable button
+      setExams(prev => prev.map(e => 
+        e.id === exam.id ? { ...e, isResuming: true } : e
+      ));
+
+      // Directly navigate to attempt - let the attempt page handle validation
+      navigate(
+        `/student/assessments/attempt/${exam.inProgressAttemptId}`,
+        { 
+          state: { 
+            autoTakeoverOnConflict: true,
+            fromResumeList: true
+          } 
+        }
+      );
+
+    } catch (error) {
+      // Handle navigation errors
+      setExams(prev => prev.map(e => 
+        e.id === exam.id ? { ...e, isResuming: false } : e
+      ));
+      
+      toast.error('Failed to navigate to attempt. Please try again');
+    }
+  };
+
   useEffect(() => {
     fetchExams();
   }, []);
@@ -233,14 +261,19 @@ const StudentAssessments = () => {
                               <span className="status-badge warning">Resume disabled</span>
                             ) : exam.hasInProgressAttempt && exam.inProgressAttemptId ? (
                               <Button
-                                variant="secondary"
+                                variant="primary"
                                 className="px-3 py-1.5"
-                                onClick={() => navigate(
-                                  `/student/assessments/attempt/${exam.inProgressAttemptId}`,
-                                  { state: { autoTakeoverOnConflict: true } }
-                                )}
+                                onClick={() => handleResumeClick(exam)}
+                                disabled={exam.isResuming}
                               >
-                                Resume
+                                {exam.isResuming ? 'Opening...' : 'Continue Attempt'}
+                              </Button>
+                            ) : exam.latestSubmittedAttempt && exam.remainingAttempts > 0 && !exam.hasInProgressAttempt ? (
+                              <Button
+                                className="px-3 py-1.5"
+                                onClick={() => navigate(`/student/assessments/${exam.id}/instructions`)}
+                              >
+                                Start New Attempt
                               </Button>
                             ) : exam.canAttempt ? (
                               <Button

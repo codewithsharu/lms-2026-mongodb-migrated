@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { FiArrowLeft, FiEdit2, FiTrash2, FiX, FiSearch, FiUsers, FiLayers } from 'react-icons/fi';
 import Layout from '../../components/Layout';
-import { teacherAPI } from '../../services/api';
+import { teacherAPI, classAPI } from '../../services/api';
 import Alert from '../../components/ui/Alert';
 
 const getZoneBadgeClass = (zoneValue) => {
@@ -20,6 +20,7 @@ const TeacherClassStudents = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedZoneFilter, setSelectedZoneFilter] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
@@ -44,9 +45,21 @@ const TeacherClassStudents = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await teacherAPI.getAssignedStudents();
-      setAssignedData(response.data);
+      console.log('Fetching students for classId:', classId);
+      const response = await classAPI.getStudents(classId);
+      console.log('API response:', response);
+      setAssignedData({
+        assignments: [{
+          class: { id: classId, name: 'Class Students' },
+          students: response.data || []
+        }],
+        summary: {
+          total_assignments: 1,
+          total_students: response.data?.length || 0
+        }
+      });
     } catch (fetchError) {
+      console.error('Fetch error:', fetchError);
       setError(fetchError.response?.data?.error || 'Failed to load class students');
     } finally {
       setLoading(false);
@@ -131,16 +144,26 @@ const TeacherClassStudents = () => {
   }, [classAssignments]);
 
   const filteredStudents = useMemo(() => {
+    let filtered = students;
+    
+    // Apply search filter
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return students;
-
-    return students.filter((student) => {
-      const fullName = String(student.full_name || '').toLowerCase();
-      const email = String(student.email || '').toLowerCase();
-      const rollNumber = String(student.roll_number || '').toLowerCase();
-      return fullName.includes(query) || email.includes(query) || rollNumber.includes(query);
-    });
-  }, [students, searchQuery]);
+    if (query) {
+      filtered = filtered.filter((student) => {
+        const fullName = String(student.full_name || '').toLowerCase();
+        const email = String(student.email || '').toLowerCase();
+        const rollNumber = String(student.roll_number || '').toLowerCase();
+        return fullName.includes(query) || email.includes(query) || rollNumber.includes(query);
+      });
+    }
+    
+    // Apply zone filter
+    if (selectedZoneFilter) {
+      filtered = filtered.filter(student => student.zone === selectedZoneFilter);
+    }
+    
+    return filtered;
+  }, [students, searchQuery, selectedZoneFilter]);
 
   const availableSections = useMemo(() => {
     const sectionMap = new Map();
@@ -213,19 +236,9 @@ const TeacherClassStudents = () => {
       return;
     }
 
-    if (!allowAllSections && !editFormData.section_id) {
-      toast.error('Section is required for this class assignment');
-      return;
-    }
-
-    if (!allowAllZones && !editFormData.zone) {
-      toast.error('Zone is required for this class assignment');
-      return;
-    }
-
     try {
       setFormLoading(true);
-      await teacherAPI.updateStudentInClass(classId, selectedStudent.id, {
+      await classAPI.updateStudentZone(selectedStudent.id, {
         full_name: editFormData.full_name,
         email: editFormData.email,
         phone: editFormData.phone || null,
@@ -251,7 +264,7 @@ const TeacherClassStudents = () => {
 
     try {
       setFormLoading(true);
-      await teacherAPI.deleteStudentFromClass(classId, selectedStudent.id);
+      await classAPI.deleteStudent(classId, selectedStudent.id);
       toast.success('Student removed successfully');
       closeDeleteModal();
       fetchAssignedStudents();
@@ -323,15 +336,50 @@ const TeacherClassStudents = () => {
                 <p className="text-sm text-gray-500">
                   Search by student name, email, or roll number. Showing {filteredStudents.length} of {students.length}.
                 </p>
-                <div className="relative w-full md:w-80">
-                  <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search students"
-                    className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:w-auto">
+                  <div className="relative w-full md:w-80">
+                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search students"
+                      className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Zone Filter:</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setSelectedZoneFilter('')}
+                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                          selectedZoneFilter === '' 
+                            ? 'bg-primary text-white border-primary' 
+                            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        All Zones
+                      </button>
+                      {['blue', 'red', 'green'].map(zone => (
+                        <button
+                          key={zone}
+                          onClick={() => setSelectedZoneFilter(zone)}
+                          className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                            selectedZoneFilter === zone 
+                              ? 'bg-blue-500 text-white border-blue-500' 
+                              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full mr-1 ${
+                            zone === 'blue' ? 'bg-blue-500' : 
+                            zone === 'red' ? 'bg-red-500' : 
+                            'bg-green-500'
+                          }`} />
+                          {zone.charAt(0).toUpperCase() + zone.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 

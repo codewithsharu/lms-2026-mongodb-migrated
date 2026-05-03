@@ -23,6 +23,7 @@ const AssessmentInstructions = () => {
   const [starting, setStarting] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [exam, setExam] = useState(null);
+  const [toastShown, setToastShown] = useState(false);
 
   const isWindowOpen = useMemo(() => {
     if (!exam) return false;
@@ -30,21 +31,59 @@ const AssessmentInstructions = () => {
     const start = exam.start_time ? new Date(exam.start_time) : null;
     const end = exam.end_time ? new Date(exam.end_time) : null;
 
-    if (start && now < start) return false;
-    if (end && now > end) return false;
+    // Match backend logic with grace periods
+    if (start && now < (start.getTime() - 120000)) return false; // 2-min grace before start
+    if (end && now > (end.getTime() + 300000)) return false; // 5-min grace after end
     return true;
   }, [exam]);
+
+  const canStartExam = useMemo(() => {
+    if (!exam || loading) return false;
+    
+    // Check if window is open
+    if (!isWindowOpen) return false;
+    
+    // Check if attempts are available
+    const remainingAttempts = Math.max(0, exam.remainingAttempts || 0);
+    if (remainingAttempts <= 0) return false;
+    
+    // Check if exam is published
+    if (exam.publish_status !== 'published') return false;
+    
+    // Check if all attempts have been submitted
+    if (exam.hasSubmittedAllAttempts) return false;
+    
+    // Check if there's an in-progress attempt (should be handled by resume)
+    if (exam.hasInProgressAttempt) return false;
+    
+    return true;
+  }, [exam, loading, isWindowOpen]);
 
   useEffect(() => {
     const fetchExamInfo = async () => {
       try {
         setLoading(true);
+        // Reset toast state when fetching new exam info
+        setToastShown(false);
+        toast.dismiss();
+        
         const response = await assessmentAPI.getStudentAvailable();
         const found = (response.data?.exams || []).find((item) => item.id === hostedAssessmentId);
 
         if (!found) {
           toast.error('Assessment not available for your profile');
           navigate('/student/assessments');
+          return;
+        }
+
+        // Check if all attempts have been submitted
+        if (found.hasSubmittedAllAttempts) {
+          toast.success('All attempts have been submitted. Redirecting to assessments...', {
+            duration: 3000
+          });
+          setTimeout(() => {
+            navigate('/student/assessments');
+          }, 1000);
           return;
         }
 
@@ -66,8 +105,9 @@ const AssessmentInstructions = () => {
       return;
     }
 
-    if (!isWindowOpen) {
-      toast.error('This assessment is not open right now');
+    // Double-check all conditions before attempting to start
+    if (!canStartExam) {
+      toast.error('This exam cannot be started at this time');
       return;
     }
 
@@ -83,6 +123,19 @@ const AssessmentInstructions = () => {
         return;
       }
 
+      // Check if attempt is already timed out but within grace period
+      if (response.data?.attempt?.remaining_seconds <= 0 && !toastShown) {
+        toast('Your attempt is near timeout. Starting anyway...', {
+          icon: '⚠️',
+          style: {
+            background: '#fbbf24',
+            color: '#92400e',
+          },
+          duration: 3000
+        });
+        setToastShown(true);
+      }
+
       navigate(`/student/assessments/attempt/${attemptId}`, {
         state: {
           shouldEnterFullscreen: true,
@@ -90,19 +143,38 @@ const AssessmentInstructions = () => {
         }
       });
     } catch (error) {
+      console.error('Start attempt error:', error);
+      
+      // Clear existing toasts to prevent overwhelming
+      toast.dismiss();
+      
       if (error.response?.data?.autoSubmittedAttempt) {
-        toast.success('Your previous in-progress attempt was auto-submitted because resume is disabled.');
+        toast.success('Your previous in-progress attempt was auto-submitted because resume is disabled.', {
+          duration: 4000
+        });
         navigate('/student/results');
         return;
       }
 
       if (error.response?.status === 409 && error.response?.data?.sessionConflict && error.response?.data?.attemptId) {
-        toast.error(error.response?.data?.error || 'This exam is active in another session');
+        toast.error(error.response?.data?.error || 'This exam is active in another session', {
+          duration: 4000
+        });
         navigate(`/student/assessments/attempt/${error.response.data.attemptId}`, {
           state: { autoTakeoverOnConflict: true }
         });
+      } else if (error.response?.status === 400 && error.response?.data?.error?.includes('timed out')) {
+        toast.error('This assessment window has ended or the attempt has expired', {
+          duration: 4000
+        });
+      } else if (error.response?.status === 400 && error.response?.data?.error?.includes('Maximum attempts')) {
+        toast.error('You have reached the maximum number of attempts for this assessment', {
+          duration: 4000
+        });
       } else {
-        toast.error(error.response?.data?.error || 'Failed to start attempt');
+        toast.error(error.response?.data?.error || 'Failed to start attempt', {
+          duration: 4000
+        });
       }
     } finally {
       setStarting(false);
@@ -249,10 +321,52 @@ const AssessmentInstructions = () => {
 
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
               <Button variant="secondary" onClick={() => navigate('/student/assessments')}>Cancel</Button>
-              <Button onClick={handleStart} disabled={starting || !agreed || !isWindowOpen}>
-                <FiCheckCircle className="h-4 w-4" />
-                {starting ? 'Starting...' : 'Agree & Start Assessment'}
-              </Button>
+              {canStartExam ? (
+                <Button onClick={handleStart} disabled={starting || !agreed}>
+                  <FiCheckCircle className="h-4 w-4" />
+                  {starting ? 'Starting...' : 'Agree & Start Assessment'}
+                </Button>
+              ) : exam?.hasInProgressAttempt ? (
+                <div className="flex flex-col items-end gap-2">
+                  <Button variant="secondary" disabled>
+                    <FiLock className="h-4 w-4" />
+                    Attempt In Progress
+                  </Button>
+                  <div className="text-right text-xs text-slate-500">
+                    <p>You have an attempt in progress</p>
+                    <p>Check your assessment list to continue</p>
+                  </div>
+                </div>
+              ) : exam?.hasSubmittedAllAttempts ? (
+                <div className="flex flex-col items-end gap-2">
+                  <Button variant="secondary" disabled>
+                    <FiCheckCircle className="h-4 w-4" />
+                    All Attempts Submitted
+                  </Button>
+                  <div className="text-right text-xs text-slate-500">
+                    <p>All attempts have been submitted</p>
+                    <p>Check your results page</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-end gap-2">
+                  <Button variant="secondary" disabled>
+                    <FiLock className="h-4 w-4" />
+                    Exam Not Available
+                  </Button>
+                  <div className="text-right text-xs text-slate-500">
+                    {!isWindowOpen && (
+                      <p>Exam window is not open</p>
+                    )}
+                    {exam && Math.max(0, exam.remainingAttempts || 0) <= 0 && (
+                      <p>No attempts remaining</p>
+                    )}
+                    {exam?.publish_status !== 'published' && (
+                      <p>Exam not published</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </Card.Body>
         </Card>

@@ -1,0 +1,21 @@
+{
+  "name": "lms-playwright-tests",
+  "version": "1.0.0",
+  "description": "Playwright test suite for LMS system",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report",
+    "test:install": "playwright install",
+    "test:setup": "node tests/setup-test-data.js",
+    "test:cleanup": "node tests/cleanup-test-data.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  },
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}

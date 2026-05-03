@@ -13,6 +13,7 @@ const classRoutes = require('./routes/classes');
 const auditLogRoutes = require('./routes/auditLogs');
 const assessmentRoutes = require('./routes/assessments');
 const compilerRoutes = require('./routes/compiler');
+const profileRoutes = require('./routes/profiles');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -87,6 +88,7 @@ app.use('/api/classes', classRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/assessments', assessmentRoutes);
 app.use('/api/compiler', compilerRoutes);
+app.use('/api/profiles', profileRoutes);
 
 // Base routes
 app.get('/', (req, res) => {

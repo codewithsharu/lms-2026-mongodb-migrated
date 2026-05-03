@@ -377,6 +377,110 @@ router.delete('/teacher/classes/:classId/students/:studentId', verifyToken, hasR
     res.json({ message: 'Student removed successfully' });
   } catch (error) { console.error('Teacher delete student error:', error); res.status(500).json({ error: 'Internal server error' }); }
 });
+// ==================== STUDENT ENDPOINTS ====================
+
+// Get students for a class (admin/teacher use)
+router.get('/:classId/students', verifyToken, async (req, res) => {
+  try {
+    const { classId } = req.params;
+    
+    // Support section filtering
+    let sectionFilter = {};
+    if (req.query.section_id) {
+      sectionFilter.section_id = req.query.section_id;
+    }
+    
+    // Support zone filtering
+    if (req.query.zone) {
+      sectionFilter.zone = req.query.zone;
+    }
+    
+    // Get students with filters
+    const students = await StudentDetail.find({ 
+      class_id: classId,
+      ...sectionFilter,
+      ...Object.keys(sectionFilter).length > 0 ? { section_id: { $exists: true } } : {}
+    }).sort({ full_name: 1 }).lean();
+    
+    // Populate user details
+    const userIds = [...new Set(students.map(s => s.user_id?.toString()).filter(Boolean))];
+    const users = userIds.length > 0 ? await User.find({ _id: { $in: userIds } }).select('_id full_name email').lean() : [];
+    const userMap = new Map(users.map(u => [u._id.toString(), u]));
+    
+    const enrichedStudents = students.map(student => ({
+      ...student,
+      user: userMap.get(student.user_id?.toString()) || null
+    }));
+    
+    res.json(enrichedStudents);
+  } catch (error) {
+    console.error('Get students error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update student zone
+router.put('/students/:studentId/zone', verifyToken, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { zone } = req.body;
+    
+    if (!zone) {
+      return res.status(400).json({ error: 'Zone is required' });
+    }
+    
+    const normalizedZone = normalizeZone(zone);
+    if (!normalizedZone) {
+      return res.status(400).json({ error: 'Invalid zone. Must be blue, red, or green' });
+    }
+    
+    const student = await StudentDetail.findOneAndUpdate(
+      { user_id: studentId },
+      { zone: normalizedZone },
+      { new: true, runValidators: true }
+    ).lean();
+    
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    
+    await logAction(req, 'UPDATE', 'student', studentId, { zone: normalizedZone });
+    res.json({ message: 'Student zone updated successfully', zone: normalizedZone });
+  } catch (error) {
+    console.error('Update student zone error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete student from class
+router.delete('/:classId/students/:studentId', verifyToken, async (req, res) => {
+  try {
+    const { classId, studentId } = req.params;
+    
+    // Check if student exists and belongs to class
+    const student = await StudentDetail.findOne({ user_id: studentId }).lean();
+    if (!student || student.class_id?.toString() !== classId) {
+      return res.status(404).json({ error: 'Student not found in this class' });
+    }
+    
+    // Remove student from class (set to unassigned)
+    await StudentDetail.updateOne(
+      { user_id: studentId },
+      { $set: { class_id: null, section_id: null, zone: null } }
+    );
+    
+    await logAction(req, 'DELETE', 'student', studentId, { 
+      class_id: classId, 
+      action: 'removed_from_class'
+    });
+    
+    res.json({ message: 'Student removed from class successfully' });
+  } catch (error) {
+    console.error('Delete student error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ==================== TEACHER ASSIGNMENTS ====================
 
 router.get('/teachers/list', verifyToken, isAdmin, async (req, res) => {

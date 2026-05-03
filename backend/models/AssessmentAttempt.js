@@ -46,6 +46,11 @@ const assessmentAttemptSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Simple test code for access control
+    test_code: {
+      type: String,
+      default: null,
+    },
     // Detailed section-wise results
     section_results: {
       mcq: {

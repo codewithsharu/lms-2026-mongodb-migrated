@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { FiArrowLeft, FiChevronDown, FiCode, FiSend } from 'react-icons/fi';
+import { FiArrowLeft, FiChevronDown, FiCode, FiSend, FiClock, FiCalendar, FiUsers, FiAlertCircle } from 'react-icons/fi';
 import Layout from '../../components/Layout';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -96,8 +96,66 @@ const HostExamCreate = () => {
     coding_challenge_ids: []
   });
 
+  // All available zones for comprehensive selection
+  const allZones = ['blue', 'red', 'green', 'unassigned'];
+
   const selectedTemplate = templates.find((item) => item.id === formData.template_id) || null;
   const selectedClassScope = assignmentScope.find((item) => item.classId === formData.class_id) || null;
+
+  // Get zone options with user counts
+  const getZoneOptions = () => {
+    if (!formData.class_id) {
+      // Show all zones when no class selected
+      return allZones.map(zone => ({
+        value: zone,
+        label: `${zone.charAt(0).toUpperCase() + zone.slice(1)} Zone`,
+        userCount: 0,
+        hasUsers: false
+      }));
+    }
+
+    // Show zones with user counts when class is selected
+    return allZones.map(zone => {
+      const userCount = availableStudents.filter(student => 
+        student.classIds.includes(formData.class_id) && 
+        student.zones.includes(zone)
+      ).length;
+
+      return {
+        value: zone,
+        label: `${zone.charAt(0).toUpperCase() + zone.slice(1)} Zone (${userCount} students)`,
+        userCount,
+        hasUsers: userCount > 0
+      };
+    });
+  };
+
+  // Enhanced time/date formatting
+  const formatDateTimeLocal = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  // Get current date/time for default values
+  const getCurrentDateTime = () => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+  };
+
+  // Get default end time (start time + 2 hours)
+  const getDefaultEndTime = () => {
+    const start = formData.start_time ? new Date(formData.start_time) : new Date();
+    start.setMinutes(start.getMinutes() - start.getTimezoneOffset());
+    start.setHours(start.getHours() + 2);
+    return start.toISOString().slice(0, 16);
+  };
 
   const fetchInitialData = async () => {
     try {
@@ -457,20 +515,35 @@ const HostExamCreate = () => {
                 ]}
               />
 
+              <div>
               <SelectMenu
                 label="Zone"
                 value={formData.zone}
                 onChange={(nextValue) => setFormData({ ...formData, zone: nextValue })}
                 options={[
                   { value: '', label: 'All Zones' },
-                  ...((selectedClassScope?.zones?.length > 0
-                    ? selectedClassScope.zones
-                    : ['blue', 'red', 'green']).map((zone) => ({
-                    value: zone,
-                    label: `${zone.charAt(0).toUpperCase() + zone.slice(1)}`
-                  })))
+                  ...getZoneOptions().map(zone => ({
+                    value: zone.value,
+                    label: zone.label
+                  }))
                 ]}
               />
+              {formData.class_id && formData.zone && (
+                <div className="mt-2 flex items-center gap-2 text-sm">
+                  {getZoneOptions().find(z => z.value === formData.zone)?.hasUsers ? (
+                    <div className="flex items-center gap-1 text-green-600">
+                      <FiUsers className="h-4 w-4" />
+                      <span>{getZoneOptions().find(z => z.value === formData.zone)?.userCount} students will have access</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-amber-600">
+                      <FiAlertCircle className="h-4 w-4" />
+                      <span>No students in this zone - exam will be inaccessible</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
               <InputField
                 label="Duration (minutes) *"
@@ -522,19 +595,76 @@ const HostExamCreate = () => {
                 ]}
               />
 
-              <InputField
-                label="Start Date/Time"
-                type="datetime-local"
-                value={formData.start_time}
-                onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-              />
+              <div>
+              <label className="form-label flex items-center gap-2">
+                <FiCalendar className="h-4 w-4" />
+                Start Date/Time
+              </label>
+              <div className="relative">
+                <InputField
+                  type="datetime-local"
+                  value={formatDateTimeLocal(formData.start_time)}
+                  onChange={(e) => {
+                    const newStartTime = e.target.value;
+                    setFormData({ 
+                      ...formData, 
+                      start_time: newStartTime,
+                      // Auto-adjust end time if it's before start time
+                      end_time: formData.end_time && new Date(newStartTime) >= new Date(formData.end_time) 
+                        ? getDefaultEndTime() 
+                        : formData.end_time
+                    });
+                  }}
+                  min={getCurrentDateTime()}
+                  placeholder="Select start date and time"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <FiCalendar className="h-4 w-4 text-slate-400" />
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                When students can begin taking the exam
+              </p>
+            </div>
 
-              <InputField
-                label="End Date/Time"
-                type="datetime-local"
-                value={formData.end_time}
-                onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-              />
+            <div>
+              <label className="form-label flex items-center gap-2">
+                <FiClock className="h-4 w-4" />
+                End Date/Time
+              </label>
+              <div className="relative">
+                <InputField
+                  type="datetime-local"
+                  value={formatDateTimeLocal(formData.end_time)}
+                  onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                  min={formData.start_time || getCurrentDateTime()}
+                  placeholder="Select end date and time"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <FiClock className="h-4 w-4 text-slate-400" />
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                When exam window closes (auto-submission)
+              </p>
+              {formData.start_time && formData.end_time && (
+                <div className="mt-2 flex items-center gap-2 text-sm">
+                  {new Date(formData.end_time) <= new Date(formData.start_time) ? (
+                    <div className="flex items-center gap-1 text-red-600">
+                      <FiAlertCircle className="h-4 w-4" />
+                      <span>End time must be after start time</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-green-600">
+                      <FiClock className="h-4 w-4" />
+                      <span>
+                        Duration: {Math.round((new Date(formData.end_time) - new Date(formData.start_time)) / (1000 * 60 * 60))} hours
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
               <div className="md:col-span-2">
                 <label className="form-label">Instructions</label>

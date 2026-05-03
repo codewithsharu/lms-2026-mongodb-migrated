@@ -1,27 +1,67 @@
-/**
- * Student Profile Component
- * Shows student's academic info, assigned teachers, and recent activity
- */
-
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardBody, Row, Col, Badge, Button, Alert } from 'react-bootstrap';
-import { FiUser, FiMail, FiPhone, FiBook, FiUsers, FiActivity, FiClock } from 'react-icons/fi';
+import { FiMail, FiHash, FiBook, FiLayers, FiMapPin, FiUsers, FiLoader, FiEdit2, FiX, FiCheck } from 'react-icons/fi';
 import profileApi from '../../services/profileApi';
 
-const StudentProfile = ({ studentId, currentUserId, currentUserRole }) => {
+// 8 Simple icon-based avatar options
+const AVATAR_OPTIONS = [
+  // Male avatars
+  { id: 'male1', gender: 'male', icon: '👨‍💼', color: 'bg-blue-500' },
+  { id: 'male2', gender: 'male', icon: '👨‍🎓', color: 'bg-indigo-500' },
+  { id: 'male3', gender: 'male', icon: '👨‍💻', color: 'bg-purple-500' },
+  { id: 'male4', gender: 'male', icon: '👨‍🏫', color: 'bg-slate-600' },
+  // Female avatars
+  { id: 'female1', gender: 'female', icon: '👩‍💼', color: 'bg-emerald-500' },
+  { id: 'female2', gender: 'female', icon: '👩‍🎓', color: 'bg-pink-500' },
+  { id: 'female3', gender: 'female', icon: '👩‍💻', color: 'bg-rose-500' },
+  { id: 'female4', gender: 'female', icon: '👩‍🏫', color: 'bg-amber-500' },
+];
+
+// Default male avatar
+const DEFAULT_AVATAR = AVATAR_OPTIONS[0];
+
+// Get avatar from localStorage or use default
+const getStoredAvatar = (userId) => {
+  const key = `user_avatar_${userId}`;
+  const stored = localStorage.getItem(key);
+  if (stored) {
+    return AVATAR_OPTIONS.find(a => a.id === stored) || DEFAULT_AVATAR;
+  }
+  return DEFAULT_AVATAR;
+};
+
+// Save avatar to localStorage
+const storeAvatar = (userId, avatarId) => {
+  const key = `user_avatar_${userId}`;
+  localStorage.setItem(key, avatarId);
+};
+
+// Teacher avatar generator
+const getTeacherAvatar = (name) => {
+  const seed = encodeURIComponent(name);
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+};
+
+const StudentProfile = ({ studentId }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedAvatar, setSelectedAvatar] = useState(DEFAULT_AVATAR);
+  const [showAvatarSelector, setShowAvatarSelector] = useState(false);
 
   useEffect(() => {
     loadProfile();
   }, [studentId]);
 
+  useEffect(() => {
+    if (profile?.user?.id) {
+      setSelectedAvatar(getStoredAvatar(profile.user.id));
+    }
+  }, [profile]);
+
   const loadProfile = async () => {
     try {
       setLoading(true);
       const response = await profileApi.getStudentProfile(studentId);
-      
       if (response.success) {
         setProfile(response.data);
       } else {
@@ -34,274 +74,218 @@ const StudentProfile = ({ studentId, currentUserId, currentUserRole }) => {
     }
   };
 
+  const handleAvatarSelect = (avatar) => {
+    setSelectedAvatar(avatar);
+    if (profile?.user?.id) {
+      storeAvatar(profile.user.id, avatar.id);
+    }
+    setShowAvatarSelector(false);
+  };
+
   if (loading) {
     return (
-      <div className="text-center py-4">
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </div>
+      <div className="flex justify-center items-center h-64">
+        <FiLoader className="animate-spin text-blue-500 text-2xl" />
       </div>
     );
   }
 
-  if (error) {
+  if (error || !profile) {
     return (
-      <Alert variant="danger">
-        <FiUser className="me-2" />
-        {error}
-      </Alert>
+      <div className="text-center py-12 text-slate-500">
+        {error || 'Profile not found'}
+      </div>
     );
   }
 
-  if (!profile) {
-    return (
-      <Alert variant="info">
-        <FiUser className="me-2" />
-        Profile not found
-      </Alert>
-    );
-  }
+  const { user, academic_info, teachers, statistics } = profile;
 
   const getZoneColor = (zone) => {
     const colors = {
-      blue: 'primary',
-      red: 'danger',
-      green: 'success',
-      unassigned: 'secondary'
+      blue: 'bg-blue-100 text-blue-700 border-blue-200',
+      red: 'bg-red-100 text-red-700 border-red-200',
+      green: 'bg-green-100 text-green-700 border-green-200'
     };
-    return colors[zone] || 'secondary';
-  };
-
-  const formatTime = (timestamp) => {
-    if (!timestamp) return 'Never';
-    return new Date(timestamp).toLocaleString();
+    return colors[zone] || 'bg-slate-100 text-slate-700 border-slate-200';
   };
 
   return (
-    <div className="student-profile">
-      {/* User Information */}
-      <Card className="mb-4">
-        <CardHeader className="bg-primary text-white">
-          <h5 className="mb-0">
-            <FiUser className="me-2" />
-            Student Profile
-          </h5>
-        </CardHeader>
-        <CardBody>
-          <Row>
-            <Col md={4} className="text-center mb-3">
-              {profile.user.profile_photo ? (
-                <img 
-                  src={profile.user.profile_photo} 
-                  alt={profile.user.full_name}
-                  className="rounded-circle mb-3"
-                  style={{ width: '120px', height: '120px', objectFit: 'cover' }}
-                />
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Profile Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        {/* Header with gradient */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5">
+          <div className="flex items-center gap-4">
+            {/* Avatar with edit button */}
+            <div className="relative">
+              <div className={`w-16 h-16 rounded-full border-3 border-white shadow-lg ${selectedAvatar.color} flex items-center justify-center text-2xl`}>
+                {selectedAvatar.icon}
+              </div>
+              <button
+                onClick={() => setShowAvatarSelector(true)}
+                className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
+                title="Change Profile Picture"
+              >
+                <FiEdit2 className="w-3.5 h-3.5 text-slate-600" />
+              </button>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">{user.full_name}</h1>
+              <div className="flex items-center gap-2 text-blue-100 text-sm mt-1">
+                <FiMail className="text-xs" />
+                <span>{user.email}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Info Grid with icons */}
+        <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <FiHash className="text-blue-600 text-sm" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Roll Number</p>
+              <p className="text-sm font-semibold text-slate-900">{academic_info.roll_number}</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <FiBook className="text-purple-600 text-sm" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Class</p>
+              <p className="text-sm font-semibold text-slate-900">{academic_info.class?.name || '-'}</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
+            <div className="p-2 bg-amber-100 rounded-lg">
+              <FiLayers className="text-amber-600 text-sm" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Section</p>
+              <p className="text-sm font-semibold text-slate-900">{academic_info.section?.name || '-'}</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <FiMapPin className="text-emerald-600 text-sm" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Zone</p>
+              {academic_info.zone ? (
+                <span className={`inline-block px-2 py-0.5 text-xs font-semibold rounded border ${getZoneColor(academic_info.zone)}`}>
+                  {academic_info.zone.toUpperCase()}
+                </span>
               ) : (
-                <div className="rounded-circle bg-light d-flex align-items-center justify-content-center mb-3"
-                     style={{ width: '120px', height: '120px' }}>
-                  <FiUser size={48} className="text-muted" />
-                </div>
+                <p className="text-sm font-semibold text-slate-900">-</p>
               )}
-              <h5>{profile.user.full_name}</h5>
-              <Badge bg={profile.user.is_active ? 'success' : 'danger'} className="mb-2">
-                {profile.user.is_active ? 'Active' : 'Inactive'}
-              </Badge>
-            </Col>
-            <Col md={8}>
-              <Row className="mb-3">
-                <Col sm={6}>
-                  <strong><FiMail className="me-2" />Email:</strong>
-                  <br />
-                  {profile.user.email}
-                </Col>
-                <Col sm={6}>
-                  <strong><FiPhone className="me-2" />Phone:</strong>
-                  <br />
-                  {profile.user.phone || 'Not provided'}
-                </Col>
-              </Row>
-              <Row className="mb-3">
-                <Col sm={6}>
-                  <strong><FiBook className="me-2" />Roll Number:</strong>
-                  <br />
-                  {profile.academic_info.roll_number}
-                </Col>
-                <Col sm={6}>
-                  <strong><FiBook className="me-2" />Academic Year:</strong>
-                  <br />
-                  {profile.academic_info.academic_year || 'Not set'}
-                </Col>
-              </Row>
-              <Row>
-                <Col sm={6}>
-                  <strong>Class:</strong>
-                  <br />
-                  {profile.academic_info.class?.name || 'Not assigned'}
-                </Col>
-                <Col sm={6}>
-                  <strong>Section:</strong>
-                  <br />
-                  {profile.academic_info.section?.name || 'Not assigned'}
-                </Col>
-              </Row>
-            </Col>
-          </Row>
-        </CardBody>
-      </Card>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      {/* Academic Information */}
-      <Card className="mb-4">
-        <CardHeader>
-          <h5 className="mb-0">
-            <FiBook className="me-2" />
-            Academic Information
-          </h5>
-        </CardHeader>
-        <CardBody>
-          <Row>
-            <Col md={6}>
-              <div className="mb-3">
-                <strong>Zone:</strong>
-                <div className="mt-1">
-                  <Badge bg={getZoneColor(profile.academic_info.zone)}>
-                    {profile.academic_info.zone?.toUpperCase() || 'UNASSIGNED'}
-                  </Badge>
-                </div>
-              </div>
-            </Col>
-            <Col md={6}>
-              <div className="mb-3">
-                <strong>Member Since:</strong>
-                <br />
-                {formatTime(profile.user.created_at)}
-              </div>
-            </Col>
-          </Row>
-        </CardBody>
-      </Card>
-
-      {/* Assigned Teachers */}
-      <Card className="mb-4">
-        <CardHeader>
-          <h5 className="mb-0">
-            <FiUsers className="me-2" />
-            Assigned Teachers ({profile.statistics.total_teachers})
-          </h5>
-        </CardHeader>
-        <CardBody>
-          {profile.teachers.length > 0 ? (
-            <div className="teacher-list">
-              {profile.teachers.map((teacher, index) => (
-                <div key={index} className="border-bottom pb-3 mb-3">
-                  <Row>
-                    <Col md={6}>
-                      <h6 className="mb-1">{teacher.full_name}</h6>
-                      <small className="text-muted">{teacher.email}</small>
-                    </Col>
-                    <Col md={6} className="text-md-end">
-                      <div className="mb-1">
-                        <Badge bg="info" className="me-2">
-                          {teacher.class_name}
-                        </Badge>
-                        {teacher.section_name && (
-                          <Badge bg="secondary" className="me-2">
-                            {teacher.section_name}
-                          </Badge>
-                        )}
-                        {teacher.zone && (
-                          <Badge bg={getZoneColor(teacher.zone)}>
-                            {teacher.zone.toUpperCase()}
-                          </Badge>
-                        )}
+      {/* Avatar Selector Modal */}
+      {showAvatarSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full">
+            <div className="flex items-center justify-between p-3 border-b border-slate-200">
+              <h2 className="font-semibold text-slate-900 text-sm">Choose Avatar</h2>
+              <button 
+                onClick={() => setShowAvatarSelector(false)}
+                className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <FiX className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <div className="p-3">
+              <div className="grid grid-cols-4 gap-2">
+                {AVATAR_OPTIONS.map((avatar) => (
+                  <button
+                    key={avatar.id}
+                    onClick={() => handleAvatarSelect(avatar)}
+                    className={`relative p-2 rounded-lg border-2 transition-all hover:scale-105 ${
+                      selectedAvatar.id === avatar.id 
+                        ? avatar.gender === 'male' ? 'border-blue-500 bg-blue-50' : 'border-pink-500 bg-pink-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`w-full aspect-square rounded-full ${avatar.color} flex items-center justify-center text-xl`}>
+                      {avatar.icon}
+                    </div>
+                    {selectedAvatar.id === avatar.id && (
+                      <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${
+                        avatar.gender === 'male' ? 'bg-blue-500' : 'bg-pink-500'
+                      }`}>
+                        <FiCheck className="w-2.5 h-2.5 text-white" />
                       </div>
-                      <small className="text-muted">
-                        {teacher.assignment_type === 'section' ? 'Section Teacher' : 'Class Teacher'}
-                      </small>
-                    </Col>
-                  </Row>
-                </div>
-              ))}
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
-            <Alert variant="info">
-              <FiUsers className="me-2" />
-              No teachers assigned yet
-            </Alert>
-          )}
-        </CardBody>
-      </Card>
+          </div>
+        </div>
+      )}
 
-      {/* Recent Activity */}
-      <Card className="mb-4">
-        <CardHeader>
-          <h5 className="mb-0">
-            <FiActivity className="me-2" />
-            Recent Activity
-          </h5>
-        </CardHeader>
-        <CardBody>
-          {profile.recent_activity.length > 0 ? (
-            <div className="activity-list">
-              {profile.recent_activity.map((activity, index) => (
-                <div key={index} className="border-bottom pb-2 mb-2">
-                  <Row>
-                    <Col md={8}>
-                      <strong>{activity.api_module}</strong>
-                      <br />
-                      <small className="text-muted">{activity.api_endpoint}</small>
-                    </Col>
-                    <Col md={4} className="text-md-end">
-                      <Badge 
-                        bg={activity.response_status >= 200 && activity.response_status < 300 ? 'success' : 'danger'}
-                        className="me-2"
-                      >
-                        {activity.response_status}
-                      </Badge>
-                      <br />
-                      <small className="text-muted">
-                        <FiClock className="me-1" />
-                        {formatTime(activity.created_at)}
-                      </small>
-                    </Col>
-                  </Row>
+      {/* Teachers Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <FiUsers className="text-indigo-500" />
+            <h2 className="font-semibold text-slate-900">Assigned Teachers</h2>
+            <span className="ml-2 px-2.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
+              {statistics.total_teachers}
+            </span>
+          </div>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          {teachers.length > 0 ? (
+            teachers.map((teacher, index) => (
+              <div key={index} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <img 
+                    src={getTeacherAvatar(teacher.full_name)}
+                    alt={teacher.full_name}
+                    className="w-10 h-10 rounded-full bg-slate-100"
+                  />
+                  <div>
+                    <p className="font-semibold text-slate-900">{teacher.full_name}</p>
+                    <p className="text-sm text-slate-500">{teacher.email}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-md font-medium">
+                    {teacher.class_name}
+                  </span>
+                  {teacher.section_name && (
+                    <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md font-medium">
+                      {teacher.section_name}
+                    </span>
+                  )}
+                  {teacher.zone && (
+                    <span className={`px-2 py-1 text-xs rounded-md font-medium border ${getZoneColor(teacher.zone)}`}>
+                      {teacher.zone.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))
           ) : (
-            <Alert variant="info">
-              <FiActivity className="me-2" />
-              No recent activity
-            </Alert>
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <FiUsers className="text-slate-400 text-2xl" />
+              </div>
+              <p className="text-slate-500">No teachers assigned yet</p>
+            </div>
           )}
-        </CardBody>
-      </Card>
-
-      {/* Statistics */}
-      <Card>
-        <CardHeader>
-          <h5 className="mb-0">
-            <FiActivity className="me-2" />
-            Statistics
-          </h5>
-        </CardHeader>
-        <CardBody>
-          <Row>
-            <Col md={4} className="text-center mb-3">
-              <h3 className="text-primary">{profile.statistics.total_teachers}</h3>
-              <small className="text-muted">Total Teachers</small>
-            </Col>
-            <Col md={4} className="text-center mb-3">
-              <h3 className="text-info">{profile.statistics.class_teachers}</h3>
-              <small className="text-muted">Class Teachers</small>
-            </Col>
-            <Col md={4} className="text-center mb-3">
-              <h3 className="text-success">{profile.statistics.section_teachers}</h3>
-              <small className="text-muted">Section Teachers</small>
-            </Col>
-          </Row>
-        </CardBody>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };

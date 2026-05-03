@@ -1661,84 +1661,100 @@ const AssessmentAttempt = () => {
     );
   }
 
-  // Render beautiful thank you page after submission
+  // Render professional enterprise-grade exam completion page
   if (submittedSummary) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-2xl">
-          <Card className="border-0 shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-12 text-center">
-              <div className="mx-auto mb-6 inline-flex h-24 w-24 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                <FiCheckCircle className="h-12 w-12 text-white" />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-xl">
+          {/* Main Success Card */}
+          <div className="bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden">
+            {/* Header Strip */}
+            <div className="bg-slate-900 px-8 py-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500">
+                  <FiCheckCircle className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-semibold text-white">Exam Submitted</h1>
+                  <p className="text-slate-400 text-sm">Your assessment has been recorded</p>
+                </div>
               </div>
-              <h1 className="text-3xl font-bold text-white mb-3">Exam Submitted Successfully!</h1>
-              <p className="text-blue-100 text-lg">Thank you for completing your assessment</p>
             </div>
-            
-            <Card.Body className="px-8 py-8">
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                  <span className="text-gray-600 font-medium">Assessment</span>
-                  <span className="text-gray-900 font-semibold">{attemptData?.hostedAssessment?.title || 'Assessment'}</span>
-                </div>
-                
-                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                  <span className="text-gray-600 font-medium">Status</span>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                    {submittedSummary.status === 'auto_submitted' ? 'Auto Submitted' : 'Submitted'}
-                  </span>
-                </div>
 
-                {submittedSummary.resultVisible && submittedSummary.resultMode !== 'preview' && (
-                  <>
-                    <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                      <span className="text-gray-600 font-medium">Score</span>
-                      <span className="text-gray-900 font-semibold text-xl">{submittedSummary.score || 0} / {submittedSummary.total_marks || 0}</span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                      <span className="text-gray-600 font-medium">Percentage</span>
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
-                        (submittedSummary.percentage || 0) >= 60 ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
-                      }`}>
-                        {submittedSummary.percentage || 0}%
-                      </span>
-                    </div>
-                  </>
-                )}
+            <div className="px-8 py-8">
+              {/* Exam Title */}
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {attemptData?.hostedAssessment?.title || 'Assessment'}
+                </h2>
+                <p className="text-slate-500 text-sm mt-1">
+                  Completed on {new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                </p>
+              </div>
 
-                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mt-6">
-                  <div className="flex items-start gap-3">
-                    <FiInfo className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm text-blue-800">
-                      <p className="font-semibold mb-1">What happens next?</p>
-                      <p>Your answers have been submitted successfully. Your results will be available once the assessment is graded by your instructor.</p>
-                    </div>
+              {/* Status Row */}
+              <div className="flex items-center justify-between py-4 border-t border-slate-100">
+                <span className="text-slate-600 font-medium">Submission Status</span>
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                  submittedSummary.status === 'auto_submitted'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-green-100 text-green-800'
+                }`}>
+                  {submittedSummary.status === 'auto_submitted' ? 'Auto Submitted' : 'Submitted'}
+                </span>
+              </div>
+
+              {/* Results - Only if visible */}
+              {submittedSummary.resultVisible && submittedSummary.resultMode !== 'preview' && (
+                <>
+                  <div className="flex items-center justify-between py-4 border-t border-slate-100">
+                    <span className="text-slate-600 font-medium">Score</span>
+                    <span className="text-slate-900 font-semibold text-lg">
+                      {submittedSummary.score || 0} / {submittedSummary.total_marks || 0}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-4 border-t border-slate-100">
+                    <span className="text-slate-600 font-medium">Percentage</span>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
+                      (submittedSummary.percentage || 0) >= 60
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {submittedSummary.percentage || 0}%
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {/* Next Steps Info */}
+              <div className="mt-6 bg-slate-50 border border-slate-200 rounded-md p-4">
+                <div className="flex items-start gap-3">
+                  <FiInfo className="h-5 w-5 text-slate-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-slate-700 text-sm">What happens next?</p>
+                    <p className="text-slate-600 text-sm mt-1">
+                      Your answers have been securely submitted. Results will be available once grading is complete.
+                    </p>
                   </div>
                 </div>
-
-                <div className="flex gap-3 mt-8">
-                  <Button 
-                    onClick={() => window.location.href = '/student/assessments'}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                  >
-                    <FiArrowLeft className="mr-2 h-4 w-4" />
-                    Back to Assessments
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={() => window.location.href = '/student/dashboard'}
-                    className="flex-1"
-                  >
-                    Go to Dashboard
-                  </Button>
-                </div>
               </div>
-            </Card.Body>
-          </Card>
-          
-          <div className="text-center mt-8 text-gray-500 text-sm">
-            <p>© 2026 EDU LMS Platform. All rights reserved.</p>
+
+              {/* Single Return Button */}
+              <div className="mt-8">
+                <Button
+                  onClick={() => navigate('/student')}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5"
+                >
+                  Return to Dashboard
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="text-center mt-6 text-slate-400 text-xs">
+            <p>© {new Date().getFullYear()} Enterprise Assessment Platform</p>
           </div>
         </div>
       </div>
@@ -2135,145 +2151,140 @@ const AssessmentAttempt = () => {
         <Modal
           open={showSubmitModal}
           onClose={() => setShowSubmitModal(false)}
-          title="Confirm Submission"
-          subtitle="Review your attempt summary before final submit"
+          title="Review & Submit"
+          subtitle="Review your progress before final submission"
           maxWidth="max-w-2xl"
           footer={(
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setShowSubmitModal(false)}>
-                Continue Attempt
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowSubmitModal(false)} className="px-4">
+                Continue Exam
               </Button>
-              <Button onClick={confirmSubmitFromModal} disabled={submitting} className="px-5 shadow-sm">
-                <FiCheckCircle className="h-4 w-4" />
-                {submitting ? 'Submitting...' : 'Confirm Final Submit'}
+              <Button
+                onClick={confirmSubmitFromModal}
+                disabled={submitting}
+                className="px-5 bg-slate-900 hover:bg-slate-800"
+              >
+                <FiCheckCircle className="h-4 w-4 mr-2" />
+                {submitting ? 'Submitting...' : 'Submit Exam'}
               </Button>
             </div>
           )}
         >
-          <div className="rounded-md border border-slate-300 bg-white p-4">
-            <div className="flex items-start gap-3">
-              <div className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-slate-200 bg-slate-50 text-slate-700">
-                <FiShield className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Submission Readiness</p>
-                <p className="mt-1 text-sm text-slate-600">Review MCQ and coding progress separately before final submission.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className={`mt-4 grid grid-cols-1 gap-3 ${hasCodingSection ? 'lg:grid-cols-2' : ''}`}>
-            <div className="rounded-md border border-slate-300 bg-white">
-              <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2.5">
-                <p className="text-sm font-semibold text-slate-900">MCQ Section</p>
-                <span className={`rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${mcqPendingQuestionCount === 0 ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+          {/* Progress Summary Cards */}
+          <div className={`grid grid-cols-1 gap-4 ${hasCodingSection ? 'sm:grid-cols-2' : ''}`}>
+            {/* MCQ Section */}
+            <div className="bg-slate-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-semibold text-slate-900">MCQ Section</span>
+                <span className={`text-sm font-medium ${mcqPendingQuestionCount === 0 ? 'text-green-600' : 'text-slate-600'}`}>
                   {mcqCompletionPercent}%
                 </span>
               </div>
-              <div className="p-3.5">
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-sm border border-slate-200 bg-slate-50 px-2 py-1">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Attempted</p>
-                    <p className="mt-0.5 text-sm font-semibold text-slate-800">{answeredCount}</p>
-                  </div>
-                  <div className="rounded-sm border border-slate-200 bg-slate-50 px-2 py-1">
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Total</p>
-                    <p className="mt-0.5 text-sm font-semibold text-slate-800">{mcqTotalQuestionCount}</p>
-                  </div>
-                  <div className={`rounded-sm border px-2 py-1 ${mcqPendingQuestionCount > 0 ? 'border-rose-200 bg-rose-50' : 'border-blue-200 bg-blue-50'}`}>
-                    <p className={`text-[10px] uppercase tracking-wide ${mcqPendingQuestionCount > 0 ? 'text-rose-600' : 'text-blue-600'}`}>Pending</p>
-                    <p className={`mt-0.5 text-sm font-semibold ${mcqPendingQuestionCount > 0 ? 'text-rose-700' : 'text-blue-700'}`}>{mcqPendingQuestionCount}</p>
-                  </div>
+              <div className="flex items-center gap-4 text-sm mb-3">
+                <div className="flex-1 text-center">
+                  <p className="text-slate-500 text-xs uppercase tracking-wide">Attempted</p>
+                  <p className="font-semibold text-slate-900">{answeredCount}</p>
                 </div>
-                <div className="mt-3 h-1.5 w-full rounded-sm bg-slate-200">
-                  <div
-                    className="h-full rounded-sm bg-blue-700 transition-all"
-                    style={{ width: `${Math.max(0, Math.min(100, mcqCompletionPercent))}%` }}
-                  />
+                <div className="w-px h-8 bg-slate-200"></div>
+                <div className="flex-1 text-center">
+                  <p className="text-slate-500 text-xs uppercase tracking-wide">Total</p>
+                  <p className="font-semibold text-slate-900">{mcqTotalQuestionCount}</p>
                 </div>
+                <div className="w-px h-8 bg-slate-200"></div>
+                <div className="flex-1 text-center">
+                  <p className={`text-xs uppercase tracking-wide ${mcqPendingQuestionCount > 0 ? 'text-amber-600' : 'text-slate-500'}`}>Pending</p>
+                  <p className={`font-semibold ${mcqPendingQuestionCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{mcqPendingQuestionCount}</p>
+                </div>
+              </div>
+              <div className="h-2 w-full rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-slate-700 transition-all"
+                  style={{ width: `${Math.max(0, Math.min(100, mcqCompletionPercent))}%` }}
+                />
               </div>
             </div>
 
+            {/* Coding Section */}
             {hasCodingSection && (
-              <div className="rounded-md border border-slate-300 bg-white">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2.5">
-                  <p className="text-sm font-semibold text-slate-900">Coding Section</p>
-                  <span className={`rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${codingPendingQuestionCount === 0 ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+              <div className="bg-slate-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-semibold text-slate-900">Coding Section</span>
+                  <span className={`text-sm font-medium ${codingPendingQuestionCount === 0 ? 'text-green-600' : 'text-slate-600'}`}>
                     {codingCompletionPercent}%
                   </span>
                 </div>
-                <div className="p-3.5">
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-sm border border-slate-200 bg-slate-50 px-2 py-1">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Attempted</p>
-                      <p className="mt-0.5 text-sm font-semibold text-slate-800">{codingAttemptedQuestionCount}</p>
-                    </div>
-                    <div className="rounded-sm border border-slate-200 bg-slate-50 px-2 py-1">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Total</p>
-                      <p className="mt-0.5 text-sm font-semibold text-slate-800">{normalizedCodingTotalQuestionCount}</p>
-                    </div>
-                    <div className={`rounded-sm border px-2 py-1 ${codingPendingQuestionCount > 0 ? 'border-rose-200 bg-rose-50' : 'border-blue-200 bg-blue-50'}`}>
-                      <p className={`text-[10px] uppercase tracking-wide ${codingPendingQuestionCount > 0 ? 'text-rose-600' : 'text-blue-600'}`}>Pending</p>
-                      <p className={`mt-0.5 text-sm font-semibold ${codingPendingQuestionCount > 0 ? 'text-rose-700' : 'text-blue-700'}`}>{codingPendingQuestionCount}</p>
-                    </div>
+                <div className="flex items-center gap-4 text-sm mb-3">
+                  <div className="flex-1 text-center">
+                    <p className="text-slate-500 text-xs uppercase tracking-wide">Attempted</p>
+                    <p className="font-semibold text-slate-900">{codingAttemptedQuestionCount}</p>
                   </div>
-                  <div className="mt-3 h-1.5 w-full rounded-sm bg-slate-200">
-                    <div
-                      className="h-full rounded-sm bg-blue-700 transition-all"
-                      style={{ width: `${Math.max(0, Math.min(100, codingCompletionPercent))}%` }}
-                    />
+                  <div className="w-px h-8 bg-slate-200"></div>
+                  <div className="flex-1 text-center">
+                    <p className="text-slate-500 text-xs uppercase tracking-wide">Total</p>
+                    <p className="font-semibold text-slate-900">{normalizedCodingTotalQuestionCount}</p>
                   </div>
+                  <div className="w-px h-8 bg-slate-200"></div>
+                  <div className="flex-1 text-center">
+                    <p className={`text-xs uppercase tracking-wide ${codingPendingQuestionCount > 0 ? 'text-amber-600' : 'text-slate-500'}`}>Pending</p>
+                    <p className={`font-semibold ${codingPendingQuestionCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{codingPendingQuestionCount}</p>
+                  </div>
+                </div>
+                <div className="h-2 w-full rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-slate-700 transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, codingCompletionPercent))}%` }}
+                  />
                 </div>
               </div>
             )}
           </div>
 
+          {/* Warning / Success Message */}
           {hasPendingUnattemptedQuestions ? (
-            <div className="mt-3 rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-              <div className="flex items-start gap-2">
-                <FiAlertTriangle className="mt-0.5 h-4 w-4" />
+            <div className="mt-4 bg-amber-50 border-l-4 border-amber-400 p-4">
+              <div className="flex items-start gap-3">
+                <FiAlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold">Unattempted questions detected</p>
-                  <p className="mt-1">
-                    MCQ pending: <span className="font-semibold">{mcqPendingQuestionCount}</span>
-                    {hasCodingSection ? (
-                      <>
-                        {' '}• Coding pending: <span className="font-semibold">{codingPendingQuestionCount}</span>
-                      </>
-                    ) : ''}
-                    . Submitting now will finalize these as unanswered.
+                  <p className="font-medium text-amber-900">Unanswered questions remain</p>
+                  <p className="text-sm text-amber-800 mt-1">
+                    {mcqPendingQuestionCount > 0 && `${mcqPendingQuestionCount} MCQ`}
+                    {hasCodingSection && mcqPendingQuestionCount > 0 && codingPendingQuestionCount > 0 && ' and '}
+                    {codingPendingQuestionCount > 0 && `${codingPendingQuestionCount} coding`}
+                    {' question'} {(mcqPendingQuestionCount + codingPendingQuestionCount) > 1 ? 's' : ''} will be submitted as unanswered.
                   </p>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-              <div className="flex items-start gap-2">
-                <FiCheckCircle className="mt-0.5 h-4 w-4" />
-                <p>All available questions are attempted. You can submit confidently.</p>
+            <div className="mt-4 bg-green-50 border-l-4 border-green-400 p-4">
+              <div className="flex items-start gap-3">
+                <FiCheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-green-900">All questions completed</p>
+                  <p className="text-sm text-green-800 mt-1">You have answered all questions. Ready to submit.</p>
+                </div>
               </div>
             </div>
           )}
 
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="rounded-md border border-slate-300 bg-white p-3 text-sm text-slate-700">
-              <div className="flex items-start gap-2">
-                <FiFlag className="mt-0.5 h-4 w-4 text-amber-600" />
-                <p>Marked for review: <span className="font-semibold">{markedCount}</span></p>
-              </div>
+          {/* Stats Row */}
+          <div className="mt-4 flex items-center gap-6 text-sm text-slate-600">
+            <div className="flex items-center gap-2">
+              <FiFlag className="h-4 w-4 text-slate-400" />
+              <span>Marked for review: <strong className="text-slate-900">{markedCount}</strong></span>
             </div>
-            <div className="rounded-md border border-slate-300 bg-white p-3 text-sm text-slate-700">
-              <div className="flex items-start gap-2">
-                <FiTarget className="mt-0.5 h-4 w-4" />
-                <p>
-                  Overall completion: <span className="font-semibold">{overallCompletionPercent}%</span>
-                  {' '}({overallAttemptedQuestionCount}/{overallTotalQuestionCount})
-                </p>
-              </div>
+            <div className="flex items-center gap-2">
+              <FiTarget className="h-4 w-4 text-slate-400" />
+              <span>Overall: <strong className="text-slate-900">{overallCompletionPercent}%</strong> ({overallAttemptedQuestionCount}/{overallTotalQuestionCount})</span>
             </div>
           </div>
-          <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-            After submission, you cannot edit your answers. Fullscreen lock will be released only after submit.
+
+          {/* Important Notice */}
+          <div className="mt-4 pt-4 border-t border-slate-200">
+            <p className="text-sm text-slate-600">
+              <strong className="text-slate-900">Important:</strong> Once submitted, you cannot modify your answers.
+              The fullscreen lock will be released after submission.
+            </p>
           </div>
         </Modal>
 

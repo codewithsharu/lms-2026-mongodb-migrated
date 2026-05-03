@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   FiPlus,
@@ -9,7 +10,9 @@ import {
   FiChevronRight,
   FiCalendar,
   FiUpload,
-  FiDownload
+  FiDownload,
+  FiUsers,
+  FiEye
 } from 'react-icons/fi';
 import { classAPI } from '../../services/api';
 import Layout from '../../components/Layout';
@@ -311,6 +314,7 @@ const ClassManagement = () => {
     }
   };
 
+  
   return (
     <Layout>
       <div className="app-page">
@@ -379,6 +383,13 @@ const ClassManagement = () => {
                     <span className={cls.is_active ? 'status-badge success' : 'status-badge warning'}>
                       {cls.is_active ? 'Active' : 'Inactive'}
                     </span>
+                    <Link
+                      to={`/admin/classes/${cls.id}/sections`}
+                      className="btn btn-secondary !h-9 !px-3 flex items-center gap-2"
+                    >
+                      <FiEye className="h-4 w-4" />
+                      View Sections
+                    </Link>
                     <Button variant="secondary" className="!h-9 !w-9 !p-0" onClick={() => openEditClass(cls)}>
                       <FiEdit2 className="h-[15px] w-[15px]" />
                     </Button>

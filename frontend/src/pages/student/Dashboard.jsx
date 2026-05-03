@@ -59,40 +59,6 @@ const StudentDashboard = () => {
           )}
         </div>
 
-        <Card>
-          <Card.Header>
-            <h2 className="section-title">Your Profile</h2>
-          </Card.Header>
-          <Card.Body>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Name</p>
-                <p className="mt-1 font-medium text-gray-800">{user?.full_name}</p>
-              </div>
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Email</p>
-                <p className="mt-1 font-medium text-gray-800 break-all">{user?.email}</p>
-              </div>
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Roll Number</p>
-                <p className="mt-1 font-medium text-gray-800">{user?.details?.roll_number || 'N/A'}</p>
-              </div>
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Class</p>
-                <p className="mt-1 font-medium text-gray-800">{user?.details?.classes?.name || 'N/A'}</p>
-              </div>
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Section</p>
-                <p className="mt-1 font-medium text-gray-800">{user?.details?.sections?.name || 'N/A'}</p>
-              </div>
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Zone</p>
-                <p className="mt-1 font-medium text-gray-800 capitalize">{user?.details?.zone || 'N/A'}</p>
-              </div>
-            </div>
-          </Card.Body>
-        </Card>
-
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard 
             icon={FiClipboard} 
