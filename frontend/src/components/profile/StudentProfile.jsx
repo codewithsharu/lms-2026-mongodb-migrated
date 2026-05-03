@@ -2,22 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { FiMail, FiHash, FiBook, FiLayers, FiMapPin, FiUsers, FiLoader, FiEdit2, FiX, FiCheck } from 'react-icons/fi';
 import profileApi from '../../services/profileApi';
 
-// Enhanced avatar options with better URLs and professional options
+// 8 Simple icon-based avatar options
 const AVATAR_OPTIONS = [
-  // Professional male avatars
-  { id: 'male1', gender: 'male', icon: '👨‍💼', color: 'bg-blue-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John&backgroundColor=b6e3f4,c0aede,d1d4f9' },
-  { id: 'male2', gender: 'male', icon: '👨‍🎓', color: 'bg-indigo-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael&backgroundColor=6366f1,c0aede,d1d4f9' },
-  { id: 'male3', gender: 'male', icon: '👨‍💻', color: 'bg-purple-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David&backgroundColor=9333ea,c0aede,d1d4f9' },
-  { id: 'male4', gender: 'male', icon: '👨‍🏫', color: 'bg-slate-600', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Robert&backgroundColor=64748b,c0aede,d1d4f9' },
-  // Professional female avatars
-  { id: 'female1', gender: 'female', icon: '👩‍💼', color: 'bg-emerald-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah&backgroundColor=10b981,c0aede,d1d4f9' },
-  { id: 'female2', gender: 'female', icon: '👩‍🎓', color: 'bg-pink-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emily&backgroundColor=ec4899,c0aede,d1d4f9' },
-  { id: 'female3', gender: 'female', icon: '👩‍💻', color: 'bg-rose-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lisa&backgroundColor=f472b0,c0aede,d1d4f9' },
-  { id: 'female4', gender: 'female', icon: '👩‍🏫', color: 'bg-amber-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jessica&backgroundColor=fbbf24,c0aede,d1d4f9' },
-  // Research/Professional avatars
-  { id: 'research1', gender: 'neutral', icon: '🔬', color: 'bg-teal-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Research&backgroundColor=14b8a6,c0aede,d1d4f9' },
-  { id: 'research2', gender: 'neutral', icon: '🧪', color: 'bg-cyan-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Science&backgroundColor=06b6d4,c0aede,d1d4f9' },
-  { id: 'research3', gender: 'neutral', icon: '🔭', color: 'bg-sky-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Discovery&backgroundColor=0ea5e9,c0aede,d1d4f9' },
+  // Male avatars
+  { id: 'male1', gender: 'male', icon: '👨‍💼', color: 'bg-blue-500' },
+  { id: 'male2', gender: 'male', icon: '👨‍🎓', color: 'bg-indigo-500' },
+  { id: 'male3', gender: 'male', icon: '👨‍💻', color: 'bg-purple-500' },
+  { id: 'male4', gender: 'male', icon: '👨‍🏫', color: 'bg-slate-600' },
+  // Female avatars
+  { id: 'female1', gender: 'female', icon: '👩‍💼', color: 'bg-emerald-500' },
+  { id: 'female2', gender: 'female', icon: '👩‍🎓', color: 'bg-pink-500' },
+  { id: 'female3', gender: 'female', icon: '👩‍💻', color: 'bg-rose-500' },
+  { id: 'female4', gender: 'female', icon: '👩‍🏫', color: 'bg-amber-500' },
 ];
 
 // Default male avatar
@@ -39,10 +35,10 @@ const storeAvatar = (userId, avatarId) => {
   localStorage.setItem(key, avatarId);
 };
 
-// Enhanced teacher avatar generator with better URLs
+// Teacher avatar generator
 const getTeacherAvatar = (name) => {
   const seed = encodeURIComponent(name);
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9&size=128`;
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
 };
 
 const StudentProfile = ({ studentId }) => {
@@ -218,16 +214,8 @@ const StudentProfile = ({ studentId }) => {
                         : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
-                    <div className={`w-full aspect-square rounded-full ${selectedAvatar.color} flex items-center justify-center text-xl`}>
-                      {selectedAvatar.url ? (
-                        <img 
-                          src={selectedAvatar.url} 
-                          alt={selectedAvatar.icon}
-                          className="w-full h-full rounded-full object-cover"
-                        />
-                      ) : (
-                        selectedAvatar.icon
-                      )}
+                    <div className={`w-full aspect-square rounded-full ${avatar.color} flex items-center justify-center text-xl`}>
+                      {avatar.icon}
                     </div>
                     {selectedAvatar.id === avatar.id && (
                       <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${
@@ -243,48 +231,6 @@ const StudentProfile = ({ studentId }) => {
           </div>
         </div>
       )}
-
-      {/* Research Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50 to-cyan-600">
-          <div className="flex items-center gap-2">
-            <FiLayers className="text-cyan-600" />
-            <h2 className="font-semibold text-white">Research & Resources</h2>
-            <span className="ml-2 px-2.5 py-0.5 bg-white text-cyan-700 text-xs font-semibold rounded-full">
-              {statistics.total_research || 0}
-            </span>
-          </div>
-        </div>
-        <div className="p-4 space-y-3">
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-teal-50">
-            <div className="p-2 bg-teal-100 rounded-lg">
-              <FiBook className="text-teal-600 text-sm" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Research Papers</p>
-              <p className="text-sm font-semibold text-slate-900">{statistics.total_papers || 0}</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-50">
-            <div className="p-2 bg-cyan-100 rounded-lg">
-              <FiMapPin className="text-cyan-600 text-sm" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Online Resources</p>
-              <p className="text-sm font-semibold text-slate-900">{statistics.total_resources || 0}</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-sky-50">
-            <div className="p-2 bg-sky-100 rounded-lg">
-              <FiHash className="text-sky-600 text-sm" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Study Materials</p>
-              <p className="text-sm font-semibold text-slate-900">{statistics.total_materials || 0}</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Teachers Card */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">

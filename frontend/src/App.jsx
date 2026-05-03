@@ -146,7 +146,7 @@ function App() {
             path="/admin/settings"
             element={
               <ProtectedRoute allowedRoles={['admin']}>
-                <UnderDevelopment title="Admin Settings" description="Settings module is under development." />
+                <AdminSettings />
               </ProtectedRoute>
             }
           />
