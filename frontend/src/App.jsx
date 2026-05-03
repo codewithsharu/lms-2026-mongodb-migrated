@@ -29,10 +29,12 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
 import UserManagement from './pages/admin/UserManagement';
 import ClassManagement from './pages/admin/ClassManagement';
+import ClassManage from './pages/admin/ClassManage';
 import ClassSections from './pages/admin/ClassSections';
 import ClassSectionStudents from './pages/admin/ClassSectionStudents';
 import AuditLogs from './pages/admin/AuditLogs';
 import AdminAnalytics from './pages/admin/Analytics';
+import AdminSettings from './pages/admin/Settings';
 import HealthCheck from './pages/admin/HealthCheck';
 import HealthCheckTable from './pages/admin/HealthCheckTable';
 import TeacherDashboard from './pages/teacher/Dashboard';
@@ -115,6 +117,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <ClassManagement />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/classes/:classId/manage" 
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <ClassManage />
               </ProtectedRoute>
             } 
           />

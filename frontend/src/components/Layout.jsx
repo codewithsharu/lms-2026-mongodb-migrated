@@ -72,7 +72,6 @@ const Layout = ({ children }) => {
         { name: 'Teachers', path: '/admin/teachers', icon: FiUser },
         { name: 'Classes', path: '/admin/classes', icon: FiBook },
         { name: 'Analytics', path: '/admin/analytics', icon: FiBarChart2 },
-        { name: 'Settings', path: '/admin/settings', icon: FiSettings },
       ],
       teacher: [
         { name: 'Dashboard', path: '/teacher', icon: FiHome },
