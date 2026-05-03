@@ -2,37 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { FiMail, FiHash, FiBook, FiLayers, FiMapPin, FiUsers, FiLoader, FiEdit2, FiX, FiCheck } from 'react-icons/fi';
 import profileApi from '../../services/profileApi';
 
-// Enhanced avatar options with more diverse and professional choices
+// Enhanced avatar options with better URLs and professional options
 const AVATAR_OPTIONS = [
-  // Professional Male Avatars
-  { id: 'male1', gender: 'male', icon: '👨‍💼', color: 'bg-blue-500', style: 'professional' },
-  { id: 'male2', gender: 'male', icon: '👨‍🎓', color: 'bg-indigo-500', style: 'professional' },
-  { id: 'male3', gender: 'male', icon: '👨‍💻', color: 'bg-purple-500', style: 'professional' },
-  { id: 'male4', gender: 'male', icon: '👨‍🏫', color: 'bg-slate-600', style: 'professional' },
-  { id: 'male5', gender: 'male', icon: '👨‍🔬', color: 'bg-cyan-500', style: 'professional' },
-  { id: 'male6', gender: 'male', icon: '👨‍🔧', color: 'bg-emerald-500', style: 'professional' },
-  // Professional Female Avatars
-  { id: 'female1', gender: 'female', icon: '👩‍💼', color: 'bg-emerald-500', style: 'professional' },
-  { id: 'female2', gender: 'female', icon: '👩‍🎓', color: 'bg-pink-500', style: 'professional' },
-  { id: 'female3', gender: 'female', icon: '👩‍💻', color: 'bg-rose-500', style: 'professional' },
-  { id: 'female4', gender: 'female', icon: '👩‍🏫', color: 'bg-amber-500', style: 'professional' },
-  { id: 'female5', gender: 'female', icon: '👩‍🔬', color: 'bg-orange-500', style: 'professional' },
-  { id: 'female6', gender: 'female', icon: '👩‍🔧', color: 'bg-teal-500', style: 'professional' },
-  // Casual/Modern Avatars
-  { id: 'casual1', gender: 'neutral', icon: '😊', color: 'bg-green-500', style: 'casual' },
-  { id: 'casual2', gender: 'neutral', icon: '🤠', color: 'bg-yellow-500', style: 'casual' },
-  { id: 'casual3', gender: 'neutral', icon: '🤖', color: 'bg-red-500', style: 'casual' },
-  { id: 'casual4', gender: 'neutral', icon: '🎭', color: 'bg-purple-500', style: 'casual' },
-  { id: 'casual5', gender: 'neutral', icon: '🦄', color: 'bg-blue-500', style: 'casual' },
-  { id: 'casual6', gender: 'neutral', icon: '🐱', color: 'bg-indigo-500', style: 'casual' },
-  // Abstract/Artistic Avatars
-  { id: 'abstract1', gender: 'neutral', icon: '🌟', color: 'bg-gradient-to-r from-yellow-400 to-orange-500', style: 'artistic' },
-  { id: 'abstract2', gender: 'neutral', icon: '🌈', color: 'bg-gradient-to-r from-blue-400 to-purple-600', style: 'artistic' },
-  { id: 'abstract3', gender: 'neutral', icon: '🌊', color: 'bg-gradient-to-r from-cyan-400 to-blue-600', style: 'artistic' },
-  { id: 'abstract4', gender: 'neutral', icon: '🌸', color: 'bg-gradient-to-r from-pink-400 to-rose-500', style: 'artistic' },
-  { id: 'abstract5', gender: 'neutral', icon: '🌺', color: 'bg-gradient-to-r from-purple-400 to-indigo-600', style: 'artistic' },
-  // Upload Custom Avatar
-  { id: 'custom', gender: 'neutral', icon: '📷', color: 'bg-gray-500', style: 'custom' },
+  // Professional male avatars
+  { id: 'male1', gender: 'male', icon: '👨‍💼', color: 'bg-blue-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John&backgroundColor=b6e3f4,c0aede,d1d4f9' },
+  { id: 'male2', gender: 'male', icon: '👨‍🎓', color: 'bg-indigo-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael&backgroundColor=6366f1,c0aede,d1d4f9' },
+  { id: 'male3', gender: 'male', icon: '👨‍💻', color: 'bg-purple-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David&backgroundColor=9333ea,c0aede,d1d4f9' },
+  { id: 'male4', gender: 'male', icon: '👨‍🏫', color: 'bg-slate-600', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Robert&backgroundColor=64748b,c0aede,d1d4f9' },
+  // Professional female avatars
+  { id: 'female1', gender: 'female', icon: '👩‍💼', color: 'bg-emerald-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah&backgroundColor=10b981,c0aede,d1d4f9' },
+  { id: 'female2', gender: 'female', icon: '👩‍🎓', color: 'bg-pink-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emily&backgroundColor=ec4899,c0aede,d1d4f9' },
+  { id: 'female3', gender: 'female', icon: '👩‍💻', color: 'bg-rose-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lisa&backgroundColor=f472b0,c0aede,d1d4f9' },
+  { id: 'female4', gender: 'female', icon: '👩‍🏫', color: 'bg-amber-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jessica&backgroundColor=fbbf24,c0aede,d1d4f9' },
+  // Research/Professional avatars
+  { id: 'research1', gender: 'neutral', icon: '🔬', color: 'bg-teal-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Research&backgroundColor=14b8a6,c0aede,d1d4f9' },
+  { id: 'research2', gender: 'neutral', icon: '🧪', color: 'bg-cyan-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Science&backgroundColor=06b6d4,c0aede,d1d4f9' },
+  { id: 'research3', gender: 'neutral', icon: '🔭', color: 'bg-sky-500', url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Discovery&backgroundColor=0ea5e9,c0aede,d1d4f9' },
 ];
 
 // Default male avatar
@@ -54,10 +39,10 @@ const storeAvatar = (userId, avatarId) => {
   localStorage.setItem(key, avatarId);
 };
 
-// Teacher avatar generator
+// Enhanced teacher avatar generator with better URLs
 const getTeacherAvatar = (name) => {
   const seed = encodeURIComponent(name);
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9&size=128`;
 };
 
 const StudentProfile = ({ studentId }) => {
@@ -211,135 +196,95 @@ const StudentProfile = ({ studentId }) => {
       {/* Avatar Selector Modal */}
       {showAvatarSelector && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <h2 className="font-semibold text-slate-900 text-lg">Choose Your Avatar</h2>
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full">
+            <div className="flex items-center justify-between p-3 border-b border-slate-200">
+              <h2 className="font-semibold text-slate-900 text-sm">Choose Avatar</h2>
               <button 
                 onClick={() => setShowAvatarSelector(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <FiX className="w-5 h-5 text-slate-500" />
+                <FiX className="w-4 h-4 text-slate-500" />
               </button>
             </div>
-            <div className="p-4">
-              {/* Avatar Categories */}
-              <div className="space-y-6">
-                {/* Professional Avatars */}
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-100 rounded-full"></div>
-                    Professional
-                  </h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {AVATAR_OPTIONS.filter(a => a.style === 'professional').map((avatar) => (
-                      <button
-                        key={avatar.id}
-                        onClick={() => handleAvatarSelect(avatar)}
-                        className={`relative p-3 rounded-lg border-2 transition-all hover:scale-105 ${
-                          selectedAvatar.id === avatar.id 
-                            ? avatar.gender === 'male' ? 'border-blue-500 bg-blue-50' : 'border-pink-500 bg-pink-50'
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className={`w-full aspect-square rounded-full ${avatar.color} flex items-center justify-center text-2xl`}>
-                          {avatar.icon}
-                        </div>
-                        {selectedAvatar.id === avatar.id && (
-                          <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ${
-                            avatar.gender === 'male' ? 'bg-blue-500' : 'bg-pink-500'
-                          }`}>
-                            <FiCheck className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Casual/Modern Avatars */}
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-100 rounded-full"></div>
-                    Casual & Modern
-                  </h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {AVATAR_OPTIONS.filter(a => a.style === 'casual').map((avatar) => (
-                      <button
-                        key={avatar.id}
-                        onClick={() => handleAvatarSelect(avatar)}
-                        className={`relative p-3 rounded-lg border-2 transition-all hover:scale-105 ${
-                          selectedAvatar.id === avatar.id 
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className={`w-full aspect-square rounded-full ${avatar.color} flex items-center justify-center text-2xl`}>
-                          {avatar.icon}
-                        </div>
-                        {selectedAvatar.id === avatar.id && (
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center bg-green-500">
-                            <FiCheck className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Artistic Avatars */}
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-purple-100 rounded-full"></div>
-                    Artistic
-                  </h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {AVATAR_OPTIONS.filter(a => a.style === 'artistic').map((avatar) => (
-                      <button
-                        key={avatar.id}
-                        onClick={() => handleAvatarSelect(avatar)}
-                        className={`relative p-3 rounded-lg border-2 transition-all hover:scale-105 ${
-                          selectedAvatar.id === avatar.id 
-                            ? 'border-purple-500 bg-purple-50'
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className={`w-full aspect-square rounded-full ${avatar.color} flex items-center justify-center text-2xl`}>
-                          {avatar.icon}
-                        </div>
-                        {selectedAvatar.id === avatar.id && (
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center bg-purple-500">
-                            <FiCheck className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom Upload */}
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-gray-100 rounded-full"></div>
-                    Custom Upload
-                  </h3>
+            <div className="p-3">
+              <div className="grid grid-cols-4 gap-2">
+                {AVATAR_OPTIONS.map((avatar) => (
                   <button
-                    className="w-full p-4 rounded-lg border-2 border-dashed border-slate-300 hover:border-slate-400 transition-colors"
-                    onClick={() => {
-                      // TODO: Implement custom avatar upload
-                      alert('Custom avatar upload coming soon!');
-                    }}
+                    key={avatar.id}
+                    onClick={() => handleAvatarSelect(avatar)}
+                    className={`relative p-2 rounded-lg border-2 transition-all hover:scale-105 ${
+                      selectedAvatar.id === avatar.id 
+                        ? avatar.gender === 'male' ? 'border-blue-500 bg-blue-50' : 'border-pink-500 bg-pink-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
                   >
-                    <div className="flex items-center justify-center gap-3">
-                      <FiUpload className="w-5 h-5 text-slate-400" />
-                      <span className="text-sm text-slate-600">Upload your own image</span>
+                    <div className={`w-full aspect-square rounded-full ${selectedAvatar.color} flex items-center justify-center text-xl`}>
+                      {selectedAvatar.url ? (
+                        <img 
+                          src={selectedAvatar.url} 
+                          alt={selectedAvatar.icon}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        selectedAvatar.icon
+                      )}
                     </div>
+                    {selectedAvatar.id === avatar.id && (
+                      <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${
+                        avatar.gender === 'male' ? 'bg-blue-500' : 'bg-pink-500'
+                      }`}>
+                        <FiCheck className="w-2.5 h-2.5 text-white" />
+                      </div>
+                    )}
                   </button>
-                </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Research Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50 to-cyan-600">
+          <div className="flex items-center gap-2">
+            <FiLayers className="text-cyan-600" />
+            <h2 className="font-semibold text-white">Research & Resources</h2>
+            <span className="ml-2 px-2.5 py-0.5 bg-white text-cyan-700 text-xs font-semibold rounded-full">
+              {statistics.total_research || 0}
+            </span>
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-teal-50">
+            <div className="p-2 bg-teal-100 rounded-lg">
+              <FiBook className="text-teal-600 text-sm" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Research Papers</p>
+              <p className="text-sm font-semibold text-slate-900">{statistics.total_papers || 0}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-50">
+            <div className="p-2 bg-cyan-100 rounded-lg">
+              <FiMapPin className="text-cyan-600 text-sm" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Online Resources</p>
+              <p className="text-sm font-semibold text-slate-900">{statistics.total_resources || 0}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-sky-50">
+            <div className="p-2 bg-sky-100 rounded-lg">
+              <FiHash className="text-sky-600 text-sm" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Study Materials</p>
+              <p className="text-sm font-semibold text-slate-900">{statistics.total_materials || 0}</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Teachers Card */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
