@@ -3,7 +3,7 @@
  * Handles all performance monitoring API calls
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const performanceApi = {
   // Dashboard endpoints
@@ -11,9 +11,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/dashboard`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -22,9 +22,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/health`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -33,9 +33,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/historical?timeRange=${timeRange}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -45,9 +45,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/system`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -56,9 +56,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/database`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -67,9 +67,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/application`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -79,9 +79,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/alerts`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -90,9 +90,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/alerts/critical`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -102,9 +102,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/thresholds`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -113,10 +113,10 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/thresholds`, {
       method: 'PUT',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ thresholds })
+      credentials: 'include',
+      body: JSON.stringify(thresholds)
     });
     return response.json();
   },
@@ -126,9 +126,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/recommendations`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -138,9 +138,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/status`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -150,9 +150,9 @@ const performanceApi = {
     const response = await fetch(`${API_BASE_URL}/performance/refresh`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },

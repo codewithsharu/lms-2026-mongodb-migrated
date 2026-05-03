@@ -3,7 +3,7 @@
  * Handles all profile and class management API calls
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const profileApi = {
   // Student Profile APIs
@@ -11,9 +11,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/student/${studentId}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -22,9 +22,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/student/${studentId}/teachers`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -34,9 +34,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/teacher/${teacherId}?include_students=${includeStudents}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -45,9 +45,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/teacher/${teacherId}/classes?include_students=${includeStudents}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -57,9 +57,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/class/${classId}?include_students=${includeStudents}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -68,9 +68,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/classes?include_students=${includeStudents}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -79,9 +79,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/class/${classId}/students/zones`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
+        'Content-Type': 'application/json'
       },
+      credentials: 'include',
       body: JSON.stringify(zoneUpdates)
     });
     return response.json();
@@ -92,9 +92,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/assignments`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
+        'Content-Type': 'application/json'
       },
+      credentials: 'include',
       body: JSON.stringify(assignmentData)
     });
     return response.json();
@@ -104,9 +104,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/assignments/${assignmentId}`, {
       method: 'DELETE',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -115,9 +115,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/assignments/teacher/${teacherId}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -137,9 +137,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/students/search?${params}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -158,9 +158,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/api/statistics?${params}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -169,9 +169,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/api/modules?time_range=${timeRange}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -180,9 +180,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/api/errors?time_range=${timeRange}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -192,9 +192,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/dashboard`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -203,9 +203,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/dashboard/teacher/${teacherId}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -214,9 +214,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/dashboard/student/${studentId}`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -226,9 +226,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/zones`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   },
@@ -237,9 +237,9 @@ const profileApi = {
     const response = await fetch(`${API_BASE_URL}/profiles/class/${classId}/zones`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`
-      }
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
     });
     return response.json();
   }

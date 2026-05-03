@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { FiAlertTriangle, FiArrowLeft, FiCheckCircle, FiClock, FiCode, FiEye, FiEyeOff, FiFlag, FiLock, FiSend, FiShield, FiTarget, FiWifi, FiWifiOff } from 'react-icons/fi';
+import { FiAlertTriangle, FiArrowLeft, FiCheckCircle, FiClock, FiCode, FiEye, FiEyeOff, FiFlag, FiInfo, FiLock, FiSend, FiShield, FiTarget, FiUser, FiWifi, FiWifiOff } from 'react-icons/fi';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Modal from '../../components/ui/Modal';
 import { assessmentAPI, compilerAPI } from '../../services/api';
 import { getExamSessionToken } from '../../utils/examSession';
+import { useAuth } from '../../context/AuthContext';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
 
@@ -316,6 +317,7 @@ const AssessmentAttempt = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { attemptId } = useParams();
+  const { user } = useAuth();
 
   const previewConfig = useMemo(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -343,12 +345,11 @@ const AssessmentAttempt = () => {
     };
   }, [location.pathname, location.search]);
 
+  const isPreviewMode = previewConfig.enabled;
   const disableFullscreenLock = parseBooleanFlag(import.meta.env.VITE_DISABLE_FULLSCREEN_LOCK);
   const fullscreenEnforced = !isPreviewMode && !disableFullscreenLock;
 
   const shouldAutoTakeoverOnConflict = Boolean(location.state?.autoTakeoverOnConflict);
-
-  const isPreviewMode = previewConfig.enabled;
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -519,16 +520,14 @@ const AssessmentAttempt = () => {
     skipNextAutosaveRef.current = true;
 
     if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
-      setSubmittedSummary({
-        status: attempt.status,
-        score: attempt.score,
-        total_marks: attempt.total_marks,
-        percentage: attempt.percentage,
-        correct_count: attempt.correct_count,
-        total_questions: attempt.total_questions,
-        resultVisible: true,
-        resultMode: hostedAssessment.result_mode
+      // Redirect submitted users to assessments page
+      toast.success('This attempt has been submitted. Redirecting to assessments...', {
+        duration: 3000
       });
+      setTimeout(() => {
+        navigate('/student/assessments');
+      }, 1000);
+      return false; // Don't load the attempt
     }
 
     return true;
@@ -545,9 +544,27 @@ const AssessmentAttempt = () => {
         forceTakeover
       });
 
+      // Check if attempt is submitted and redirect immediately
+      const attempt = response.data?.attempt;
+      if (attempt && (attempt.status === 'submitted' || attempt.status === 'auto_submitted')) {
+        toast.success('This attempt has been submitted. Redirecting to assessments...', {
+          duration: 3000
+        });
+        setTimeout(() => {
+          navigate('/student/assessments');
+        }, 1000);
+        return;
+      }
+
       if (!hydrateAttemptState(response.data)) {
         const errorMessage = 'Attempt data not available or invalid';
         toast.error(errorMessage);
+        
+        // If coming from resume list, show specific message
+        if (location.state?.fromResumeList) {
+          toast.error('This attempt is no longer available. It may have been submitted or expired.');
+        }
+        
         if (!hasBootstrapAttemptRef.current) {
           navigate('/student/assessments');
         }
@@ -576,14 +593,40 @@ const AssessmentAttempt = () => {
       if (error.response?.status === 404) {
         errorMessage = 'Assessment attempt not found';
         shouldRedirect = true;
+        
+        // If coming from resume list, show specific message
+        if (location.state?.fromResumeList) {
+          errorMessage = 'This attempt was not found. It may have been deleted or expired.';
+        }
       } else if (error.response?.status === 400) {
         const backendMessage = error.response?.data?.error;
-        if (backendMessage?.includes('timed out')) {
+        const errorType = error.response?.data?.type;
+        
+        if (errorType === 'submitted') {
+          // Handle submitted attempt - redirect to assessments
+          toast.success('This attempt has been submitted. Redirecting to assessments...', {
+            duration: 3000
+          });
+          setTimeout(() => {
+            navigate('/student/assessments');
+          }, 1000);
+          return; // Don't show error toast
+        } else if (backendMessage?.includes('timed out')) {
           errorMessage = 'Assessment time has expired';
-        } else if (backendMessage?.includes('submitted')) {
-          errorMessage = 'Assessment has already been submitted';
+          
+          // If coming from resume list, show specific message
+          if (location.state?.fromResumeList) {
+            errorMessage = 'Your attempt has expired due to time limit. The assessment has been auto-submitted.';
+          }
         } else if (backendMessage?.includes('Maximum attempts')) {
           errorMessage = 'Maximum attempts reached';
+        } else if (backendMessage?.includes('window has ended')) {
+          errorMessage = 'Assessment window has ended';
+          
+          // If coming from resume list, show specific message
+          if (location.state?.fromResumeList) {
+            errorMessage = 'The assessment window has ended. No further attempts can be made.';
+          }
         } else {
           errorMessage = backendMessage || 'Assessment no longer available';
         }
@@ -1563,7 +1606,7 @@ const AssessmentAttempt = () => {
             </Card.Header>
             <Card.Body className="space-y-4">
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                {sessionConflict.message || 'This attempt is active in another browser session.'}
+                {sessionConflict.message || 'This attempt is active in another session.'}
               </div>
               <p className="text-sm text-slate-600">
                 To prevent conflicts, only one browser session can save answers at a time.
@@ -1584,7 +1627,7 @@ const AssessmentAttempt = () => {
       );
     }
 
-    // Fallback error state when no attempt data is available
+    // Show error fallback instead of blank page
     return (
       <div className="min-h-screen bg-slate-100 px-4 py-8">
         <Card className="mx-auto max-w-2xl">
@@ -1593,33 +1636,22 @@ const AssessmentAttempt = () => {
           </Card.Header>
           <Card.Body className="space-y-4">
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-              <div className="flex items-start gap-2">
-                <FiAlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                <p>
-                  Unable to load this assessment attempt. The attempt may have expired, been submitted, or is no longer available.
-                </p>
-              </div>
+              This assessment attempt is currently unavailable or has encountered an error.
             </div>
-            
-            <div className="space-y-2">
-              <p className="text-sm text-slate-600">
-                This could happen if:
-              </p>
-              <ul className="list-inside list-disc text-sm text-slate-600 space-y-1">
-                <li>The assessment time limit has expired</li>
-                <li>The attempt was already submitted</li>
-                <li>The assessment is no longer active</li>
-                <li>There was a network connection issue</li>
-              </ul>
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-2">
+            <p className="text-sm text-slate-600">
+              This could be due to:
+            </p>
+            <ul className="text-sm text-slate-600 list-disc list-inside space-y-1">
+              <li>The attempt has expired</li>
+              <li>The attempt has already been submitted</li>
+              <li>There was a system error loading the attempt</li>
+              <li>The assessment is no longer available</li>
+            </ul>
+            <div className="flex flex-wrap justify-end gap-2 mt-4">
               <Button variant="secondary" onClick={() => navigate('/student/assessments')}>
-                <FiArrowLeft className="h-4 w-4 mr-2" />
                 Back to Assessments
               </Button>
-              <Button onClick={() => window.location.reload()}>
-                <FiWifi className="h-4 w-4 mr-2" />
+              <Button variant="primary" onClick={() => window.location.reload()}>
                 Try Again
               </Button>
             </div>
@@ -1629,65 +1661,86 @@ const AssessmentAttempt = () => {
     );
   }
 
+  // Render beautiful thank you page after submission
   if (submittedSummary) {
     return (
-      <div className="min-h-screen bg-slate-100 px-4 py-8">
-        <Card className="mx-auto max-w-3xl">
-          <Card.Header>
-            <h2 className="section-title">Assessment Submitted</h2>
-          </Card.Header>
-          <Card.Body className="space-y-4">
-            <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
-              <div className="flex items-start gap-2">
-                <FiCheckCircle className="mt-0.5 h-4 w-4" />
-                <p>
-                  Your attempt has been submitted successfully ({submittedSummary.status === 'auto_submitted' ? 'auto-submitted on timeout' : 'manual submission'}).
-                </p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-2xl">
+          <Card className="border-0 shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-12 text-center">
+              <div className="mx-auto mb-6 inline-flex h-24 w-24 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                <FiCheckCircle className="h-12 w-12 text-white" />
               </div>
+              <h1 className="text-3xl font-bold text-white mb-3">Exam Submitted Successfully!</h1>
+              <p className="text-blue-100 text-lg">Thank you for completing your assessment</p>
             </div>
+            
+            <Card.Body className="px-8 py-8">
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                  <span className="text-gray-600 font-medium">Assessment</span>
+                  <span className="text-gray-900 font-semibold">{attemptData?.hostedAssessment?.title || 'Assessment'}</span>
+                </div>
+                
+                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                  <span className="text-gray-600 font-medium">Status</span>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                    {submittedSummary.status === 'auto_submitted' ? 'Auto Submitted' : 'Submitted'}
+                  </span>
+                </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Score</p>
-                <p className="mt-1 text-lg font-semibold text-slate-800">
-                  {submittedSummary.resultVisible ? `${submittedSummary.score ?? 0} / ${submittedSummary.total_marks ?? 0}` : 'Hidden'}
-                </p>
-              </div>
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Percentage</p>
-                <p className="mt-1 text-lg font-semibold text-slate-800">
-                  {submittedSummary.resultVisible ? `${submittedSummary.percentage ?? 0}%` : 'Hidden'}
-                </p>
-              </div>
-              <div className="surface-card-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Correct</p>
-                <p className="mt-1 text-lg font-semibold text-slate-800">
-                  {submittedSummary.resultVisible ? `${submittedSummary.correct_count ?? 0} / ${submittedSummary.total_questions ?? 0}` : 'Hidden'}
-                </p>
-              </div>
-            </div>
+                {submittedSummary.resultVisible && submittedSummary.resultMode !== 'preview' && (
+                  <>
+                    <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                      <span className="text-gray-600 font-medium">Score</span>
+                      <span className="text-gray-900 font-semibold text-xl">{submittedSummary.score || 0} / {submittedSummary.total_marks || 0}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                      <span className="text-gray-600 font-medium">Percentage</span>
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
+                        (submittedSummary.percentage || 0) >= 60 ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                      }`}>
+                        {submittedSummary.percentage || 0}%
+                      </span>
+                    </div>
+                  </>
+                )}
 
-            {!submittedSummary.resultVisible && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
-                Result mode is <span className="font-medium capitalize">{String(submittedSummary.resultMode || '').replace('_', ' ') || 'restricted'}</span>. Your teacher controls when marks are visible.
-              </div>
-            )}
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mt-6">
+                  <div className="flex items-start gap-3">
+                    <FiInfo className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-blue-800">
+                      <p className="font-semibold mb-1">What happens next?</p>
+                      <p>Your answers have been submitted successfully. Your results will be available once the assessment is graded by your instructor.</p>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="flex flex-wrap justify-end gap-2">
-              {isPreviewMode ? (
-                <>
-                  <Button variant="secondary" onClick={() => navigate('/teacher/assessments/preview-lab')}>Back to Preview Lab</Button>
-                  <Button onClick={() => window.location.reload()}>Run Preview Again</Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="secondary" onClick={() => navigate('/student/assessments')}>Back to Assessments</Button>
-                  <Button onClick={() => navigate('/student/results')}>Go to Results</Button>
-                </>
-              )}
-            </div>
-          </Card.Body>
-        </Card>
+                <div className="flex gap-3 mt-8">
+                  <Button 
+                    onClick={() => window.location.href = '/student/assessments'}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                  >
+                    <FiArrowLeft className="mr-2 h-4 w-4" />
+                    Back to Assessments
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => window.location.href = '/student/dashboard'}
+                    className="flex-1"
+                  >
+                    Go to Dashboard
+                  </Button>
+                </div>
+              </div>
+            </Card.Body>
+          </Card>
+          
+          <div className="text-center mt-8 text-gray-500 text-sm">
+            <p>© 2026 EDU LMS Platform. All rights reserved.</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1698,25 +1751,29 @@ const AssessmentAttempt = () => {
         ? 'p-1.5 pb-[88px] sm:p-2 sm:pb-[92px] lg:p-2.5 lg:pb-[96px]'
         : 'p-2 pb-28 sm:p-3 sm:pb-32 lg:p-4 lg:pb-32'
     }`}>
-      <div className={`flex w-full flex-col ${currentSection === 'coding' ? 'gap-2' : 'gap-3'}`}>
-        <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm sm:p-2.5">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex w-full flex-col ${currentSection === 'coding' ? 'gap-2' : 'gap-3'}">
+        {/* Enterprise-style Header with Exam Info, Student Info, and Controls */}
+        <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 p-3 shadow-sm sm:p-4 mb-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            {/* Left side - Exam Info */}
             <div className="min-w-0 lg:flex-1">
-              {!hasCodingSection && (
-                <p className="mt-1 text-xs text-slate-500">{attemptData.hostedAssessment.subject}</p>
-              )}
-
-              {currentSection !== 'coding' && lastAutoSavedAt && (
-                <p className="mt-1 text-xs text-slate-500">
-                  Autosaved at {lastAutoSavedAt.toLocaleTimeString()}
-                </p>
-              )}
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
+                  <FiCode className="h-4 w-4 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-base font-bold text-white truncate sm:text-lg">
+                    {attemptData?.hostedAssessment?.title || 'Assessment'}
+                  </h1>
+                </div>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 lg:flex-1">
+            {/* Middle - Section Switcher and Challenge Selector */}
+            <div className="flex flex-wrap items-center gap-2 lg:flex-1 lg:justify-center">
               {currentSection === 'coding' && codingChallengeIds.length > 1 && (
                 <select
-                  className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700"
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
                   value={selectedCodingChallengeIndex}
                   onChange={(event) => setSelectedCodingChallengeIndex(Number(event.target.value) || 0)}
                 >
@@ -1727,7 +1784,7 @@ const AssessmentAttempt = () => {
               )}
 
               {hasCodingSection && (
-                <div className="exam-section-switcher order-last inline-flex w-full max-w-[620px] items-stretch p-1 sm:w-auto">
+                <div className="exam-section-switcher inline-flex items-stretch p-1 bg-white rounded-lg border border-slate-200">
                   <button
                     type="button"
                     className={`exam-section-btn ${currentSection === 'mcq' ? 'is-active' : ''}`}
@@ -1750,15 +1807,11 @@ const AssessmentAttempt = () => {
                     type="button"
                     className={`exam-section-btn ${currentSection === 'coding' ? 'is-active' : ''}`}
                     onClick={() => {
-                      if (switchingToCoding) {
-                        return;
-                      }
-
+                      if (switchingToCoding) return;
                       if (isCodingSectionUnlocked) {
                         setCurrentSection('coding');
                         return;
                       }
-
                       moveToCodingSection();
                     }}
                     disabled={switchingToCoding}
@@ -1779,8 +1832,22 @@ const AssessmentAttempt = () => {
                 </div>
               )}
             </div>
-          </div>
 
+            {/* Right side - Student Info */}
+            <div className="flex items-center gap-3 lg:flex-1 lg:justify-end">
+              <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-1.5 border border-slate-200">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600">
+                  <FiUser className="h-3.5 w-3.5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-slate-900 truncate">{user?.full_name || 'Student'}</p>
+                  <p className="text-[10px] text-slate-600">
+                    Roll: {user?.roll_number || user?.student?.roll_number || 'N/A'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {fullscreenEnforced && !isFullscreen && (

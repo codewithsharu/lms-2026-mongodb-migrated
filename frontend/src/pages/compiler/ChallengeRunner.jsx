@@ -609,7 +609,7 @@ const ChallengeRunner = () => {
       setCustomRunOutput('');
       setCustomRunError('');
       setTestCaseError('');
-      toast.success('Challenge loaded', { id: `${toastIds.challengeLoaded}-${challengeId}` });
+      // toast.success('Challenge loaded', { id: `${toastIds.challengeLoaded}-${challengeId}` });
     } catch (error) {
       const message = error.response?.data?.error || 'Failed to load challenge';
       setChallengeError(message);

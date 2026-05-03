@@ -4,9 +4,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardBody, Row, Col, Badge, Button, Alert, Modal, Form } from 'react-bootstrap';
-import { FiUser, FiMail, FiPhone, FiBook, FiUsers, FiActivity, FiClock, FiEdit2, FiPlus, FiGrid } from 'react-icons/fi';
+import { FiUser, FiMail, FiPhone, FiBook, FiUsers, FiActivity, FiClock, FiEdit2, FiPlus, FiGrid, FiX, FiLoader } from 'react-icons/fi';
 import profileApi from '../../services/profileApi';
+import Card from '../ui/Card';
+import toast from 'react-hot-toast';
 
 const TeacherProfile = ({ teacherId, currentUserId, currentUserRole }) => {
   const [profile, setProfile] = useState(null);
@@ -69,12 +70,12 @@ const TeacherProfile = ({ teacherId, currentUserId, currentUserRole }) => {
 
   const getZoneColor = (zone) => {
     const colors = {
-      blue: 'primary',
-      red: 'danger',
-      green: 'success',
-      unassigned: 'secondary'
+      blue: 'bg-blue-100 text-blue-800 border-blue-200',
+      red: 'bg-red-100 text-red-800 border-red-200',
+      green: 'bg-green-100 text-green-800 border-green-200',
+      unassigned: 'bg-gray-100 text-gray-800 border-gray-200'
     };
-    return colors[zone] || 'secondary';
+    return colors[zone] || colors.unassigned;
   };
 
   const formatTime = (timestamp) => {
@@ -96,376 +97,391 @@ const TeacherProfile = ({ teacherId, currentUserId, currentUserRole }) => {
 
   if (loading) {
     return (
-      <div className="text-center py-4">
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </div>
+      <div className="flex justify-center items-center py-8">
+        <FiLoader className="animate-spin text-primary text-2xl" />
+        <span className="ml-2 text-gray-600">Loading profile...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <Alert variant="danger">
-        <FiUser className="me-2" />
+      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
+        <FiUser className="mr-2" />
         {error}
-      </Alert>
+      </div>
     );
   }
 
   if (!profile) {
     return (
-      <Alert variant="info">
-        <FiUser className="me-2" />
+      <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg flex items-center">
+        <FiUser className="mr-2" />
         Profile not found
-      </Alert>
+      </div>
     );
   }
 
   return (
-    <div className="teacher-profile">
+    <div className="teacher-profile space-y-6">
       {/* User Information */}
-      <Card className="mb-4">
-        <CardHeader className="bg-primary text-white">
-          <h5 className="mb-0">
-            <FiUser className="me-2" />
+      <Card>
+        <Card.Header className="bg-primary text-white">
+          <h2 className="text-xl font-semibold flex items-center">
+            <FiUser className="mr-2" />
             Teacher Profile
-          </h5>
-        </CardHeader>
-        <CardBody>
-          <Row>
-            <Col md={4} className="text-center mb-3">
+          </h2>
+        </Card.Header>
+        <Card.Body>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="text-center">
               {profile.user.profile_photo ? (
                 <img 
                   src={profile.user.profile_photo} 
                   alt={profile.user.full_name}
-                  className="rounded-circle mb-3"
-                  style={{ width: '120px', height: '120px', objectFit: 'cover' }}
+                  className="w-32 h-32 rounded-full mx-auto mb-4 object-cover border-4 border-white shadow-lg"
                 />
               ) : (
-                <div className="rounded-circle bg-light d-flex align-items-center justify-content-center mb-3"
-                     style={{ width: '120px', height: '120px' }}>
-                  <FiUser size={48} className="text-muted" />
+                <div className="w-32 h-32 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-lg">
+                  <FiUser size={48} className="text-gray-400" />
                 </div>
               )}
-              <h5>{profile.user.full_name}</h5>
-              <Badge bg={profile.user.is_active ? 'success' : 'danger'} className="mb-2">
+              <h3 className="text-lg font-semibold mb-2">{profile.user.full_name}</h3>
+              <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                profile.user.is_active 
+                  ? 'bg-green-100 text-green-800 border border-green-200' 
+                  : 'bg-red-100 text-red-800 border border-red-200'
+              }`}>
                 {profile.user.is_active ? 'Active' : 'Inactive'}
-              </Badge>
-            </Col>
-            <Col md={8}>
-              <Row className="mb-3">
-                <Col sm={6}>
-                  <strong><FiMail className="me-2" />Email:</strong>
-                  <br />
-                  {profile.user.email}
-                </Col>
-                <Col sm={6}>
-                  <strong><FiPhone className="me-2" />Phone:</strong>
-                  <br />
-                  {profile.user.phone || 'Not provided'}
-                </Col>
-              </Row>
-              <Row className="mb-3">
-                <Col sm={6}>
-                  <strong>Role:</strong>
-                  <br />
-                  <Badge bg="info">{profile.user.role.toUpperCase()}</Badge>
-                </Col>
-                <Col sm={6}>
-                  <strong>Member Since:</strong>
-                  <br />
-                  {formatTime(profile.user.created_at)}
-                </Col>
-              </Row>
-              <Row>
-                <Col sm={6}>
-                  <strong>Last Login:</strong>
-                  <br />
-                  {formatTime(profile.user.last_login)}
-                </Col>
-                <Col sm={6}>
-                  <strong>Status:</strong>
-                  <br />
-                  <Badge bg={profile.user.is_active ? 'success' : 'danger'}>
+              </span>
+            </div>
+            <div className="md:col-span-2 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center text-gray-600 mb-1">
+                    <FiMail className="mr-2" />
+                    <span className="font-medium">Email:</span>
+                  </div>
+                  <div className="text-gray-900">{profile.user.email}</div>
+                </div>
+                <div>
+                  <div className="flex items-center text-gray-600 mb-1">
+                    <FiPhone className="mr-2" />
+                    <span className="font-medium">Phone:</span>
+                  </div>
+                  <div className="text-gray-900">{profile.user.phone || 'Not provided'}</div>
+                </div>
+                <div>
+                  <div className="text-gray-600 mb-1">
+                    <span className="font-medium">Role:</span>
+                  </div>
+                  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full border border-blue-200">
+                    {profile.user.role.toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <div className="text-gray-600 mb-1">
+                    <span className="font-medium">Member Since:</span>
+                  </div>
+                  <div className="text-gray-900">{formatTime(profile.user.created_at)}</div>
+                </div>
+                <div>
+                  <div className="text-gray-600 mb-1">
+                    <span className="font-medium">Last Login:</span>
+                  </div>
+                  <div className="text-gray-900">{formatTime(profile.user.last_login)}</div>
+                </div>
+                <div>
+                  <div className="text-gray-600 mb-1">
+                    <span className="font-medium">Status:</span>
+                  </div>
+                  <span className={`inline-block px-2 py-1 text-xs rounded-full border ${
+                    profile.user.is_active 
+                      ? 'bg-green-100 text-green-800 border border-green-200' 
+                      : 'bg-red-100 text-red-800 border border-red-200'
+                  }`}>
                     {profile.user.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </Col>
-              </Row>
-            </Col>
-          </Row>
-        </CardBody>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card.Body>
       </Card>
 
       {/* Assignment Statistics */}
-      <Card className="mb-4">
-        <CardHeader>
-          <h5 className="mb-0">
-            <FiGrid className="me-2" />
+      <Card>
+        <Card.Header>
+          <h2 className="text-xl font-semibold flex items-center">
+            <FiGrid className="mr-2" />
             Assignment Overview
-          </h5>
-        </CardHeader>
-        <CardBody>
-          <Row>
-            <Col md={3} className="text-center mb-3">
-              <h3 className="text-primary">{profile.assignments.total_classes}</h3>
-              <small className="text-muted">Total Classes</small>
-            </Col>
-            <Col md={3} className="text-center mb-3">
-              <h3 className="text-info">{profile.assignments.total_sections}</h3>
-              <small className="text-muted">Total Sections</small>
-            </Col>
-            <Col md={3} className="text-center mb-3">
-              <h3 className="text-success">{profile.assignments.total_students}</h3>
-              <small className="text-muted">Total Students</small>
-            </Col>
-            <Col md={3} className="text-center mb-3">
-              <h3 className="text-warning">{profile.statistics.unique_zones}</h3>
-              <small className="text-muted">Unique Zones</small>
-            </Col>
-          </Row>
-        </CardBody>
+          </h2>
+        </Card.Header>
+        <Card.Body>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold text-blue-600 mb-2">{profile.assignments.total_classes}</div>
+              <div className="text-sm text-gray-600">Total Classes</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-purple-600 mb-2">{profile.assignments.total_sections}</div>
+              <div className="text-sm text-gray-600">Total Sections</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-green-600 mb-2">{profile.assignments.total_students}</div>
+              <div className="text-sm text-gray-600">Total Students</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-orange-600 mb-2">{profile.statistics.unique_zones}</div>
+              <div className="text-sm text-gray-600">Unique Zones</div>
+            </div>
+          </div>
+        </Card.Body>
       </Card>
 
       {/* Class Assignments */}
-      <Card className="mb-4">
-        <CardHeader>
-          <h5 className="mb-0">
-            <FiBook className="me-2" />
+      <Card>
+        <Card.Header>
+          <h2 className="text-xl font-semibold flex items-center">
+            <FiBook className="mr-2" />
             Class Assignments ({profile.assignments.total_classes})
-          </h5>
-        </CardHeader>
-        <CardBody>
+          </h2>
+        </Card.Header>
+        <Card.Body>
           {profile.assignments.classes.length > 0 ? (
-            <div className="class-list">
+            <div className="space-y-4">
               {profile.assignments.classes.map((classData, index) => (
-                <div key={index} className="border rounded p-3 mb-3">
-                  <Row>
-                    <Col md={6}>
-                      <h6 className="mb-2">{classData.class.name}</h6>
-                      <p className="text-muted mb-2">{classData.class.description}</p>
-                      <div className="mb-2">
-                        <Badge bg="info" className="me-2">
+                <div key={index} className="border border-gray-200 rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-2">{classData.class.name}</h3>
+                      <p className="text-gray-600 text-sm mb-3">{classData.class.description}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full border border-blue-200">
                           {classData.class.academic_year || 'No Year'}
-                        </Badge>
+                        </span>
                         {classData.zones.map((zone, zoneIndex) => (
-                          <Badge key={zoneIndex} bg={getZoneColor(zone)} className="me-1">
+                          <span key={zoneIndex} className={`inline-block px-2 py-1 text-xs rounded-full border ${getZoneColor(zone)}`}>
                             {zone.toUpperCase()}
-                          </Badge>
+                          </span>
                         ))}
                       </div>
-                    </Col>
-                    <Col md={6} className="text-md-end">
+                    </div>
+                    <div className="text-right">
                       <div className="mb-2">
-                        <strong>Students:</strong> {classData.student_count}
+                        <span className="font-medium">Students:</span> {classData.student_count}
                       </div>
                       <div className="mb-2">
-                        <strong>Sections:</strong> {classData.sections.length}
+                        <span className="font-medium">Sections:</span> {classData.sections.length}
                       </div>
-                      <Button 
-                        variant="outline-primary" 
-                        size="sm"
+                      <button 
+                        className="inline-flex items-center px-3 py-2 border border-blue-300 text-blue-700 text-sm rounded-md hover:bg-blue-50 transition-colors"
                         onClick={() => showClassStudents(classData)}
                       >
-                        <FiUsers className="me-1" />
+                        <FiUsers className="mr-1" />
                         Manage Students
-                      </Button>
-                    </Col>
-                  </Row>
+                      </button>
+                    </div>
+                  </div>
                   
                   {/* Zone Distribution */}
                   {Object.keys(classData.zone_distribution).length > 0 && (
-                    <Row className="mt-3 pt-3 border-top">
-                      <Col md={12}>
-                        <strong>Zone Distribution:</strong>
-                        <div className="mt-2">
-                          {Object.entries(classData.zone_distribution).map(([zone, count]) => (
-                            <Badge key={zone} bg={getZoneColor(zone)} className="me-2 mb-1">
-                              {zone.toUpperCase()}: {count}
-                            </Badge>
-                          ))}
-                        </div>
-                      </Col>
-                    </Row>
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="font-medium text-gray-700 mb-2">Zone Distribution:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(classData.zone_distribution).map(([zone, count]) => (
+                          <span key={zone} className={`inline-block px-2 py-1 text-xs rounded-full border ${getZoneColor(zone)}`}>
+                            {zone.toUpperCase()}: {count}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
           ) : (
-            <Alert variant="info">
-              <FiBook className="me-2" />
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg flex items-center">
+              <FiBook className="mr-2" />
               No class assignments found
-            </Alert>
+            </div>
           )}
-        </CardBody>
+        </Card.Body>
       </Card>
 
       {/* Recent Activity */}
-      <Card className="mb-4">
-        <CardHeader>
-          <h5 className="mb-0">
-            <FiActivity className="me-2" />
+      <Card>
+        <Card.Header>
+          <h2 className="text-xl font-semibold flex items-center">
+            <FiActivity className="mr-2" />
             Recent Activity
-          </h5>
-        </CardHeader>
-        <CardBody>
+          </h2>
+        </Card.Header>
+        <Card.Body>
           {profile.recent_activity.length > 0 ? (
-            <div className="activity-list">
+            <div className="space-y-3">
               {profile.recent_activity.map((activity, index) => (
-                <div key={index} className="border-bottom pb-2 mb-2">
-                  <Row>
-                    <Col md={8}>
-                      <strong>{activity.api_module}</strong>
-                      <br />
-                      <small className="text-muted">{activity.api_endpoint}</small>
-                    </Col>
-                    <Col md={4} className="text-md-end">
-                      <Badge 
-                        bg={activity.response_status >= 200 && activity.response_status < 300 ? 'success' : 'danger'}
-                        className="me-2"
-                      >
+                <div key={index} className="border-b border-gray-200 pb-3 last:border-b-0">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2">
+                      <div className="font-semibold text-gray-900">{activity.api_module}</div>
+                      <div className="text-sm text-gray-600">{activity.api_endpoint}</div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-block px-2 py-1 text-xs rounded-full border ${
+                        activity.response_status >= 200 && activity.response_status < 300
+                          ? 'bg-green-100 text-green-800 border-green-200'
+                          : 'bg-red-100 text-red-800 border-red-200'
+                      }`}>
                         {activity.response_status}
-                      </Badge>
-                      <br />
-                      <small className="text-muted">
-                        <FiClock className="me-1" />
+                      </span>
+                      <div className="text-xs text-gray-500 mt-1 flex items-center justify-end">
+                        <FiClock className="mr-1" />
                         {formatTime(activity.created_at)}
-                      </small>
-                    </Col>
-                  </Row>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
-            <Alert variant="info">
-              <FiActivity className="me-2" />
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg flex items-center">
+              <FiActivity className="mr-2" />
               No recent activity
-            </Alert>
+            </div>
           )}
-        </CardBody>
+        </Card.Body>
       </Card>
 
       {/* Statistics */}
       <Card>
-        <CardHeader>
-          <h5 className="mb-0">
-            <FiActivity className="me-2" />
+        <Card.Header>
+          <h2 className="text-xl font-semibold flex items-center">
+            <FiActivity className="mr-2" />
             Statistics
-          </h5>
-        </CardHeader>
-        <CardBody>
-          <Row>
-            <Col md={4} className="text-center mb-3">
-              <h3 className="text-primary">{profile.statistics.total_assignments}</h3>
-              <small className="text-muted">Total Assignments</small>
-            </Col>
-            <Col md={4} className="text-center mb-3">
-              <h3 className="text-info">{profile.statistics.unique_zones}</h3>
-              <small className="text-muted">Unique Zones</small>
-            </Col>
-            <Col md={4} className="text-center mb-3">
-              <h3 className="text-success">{profile.statistics.avg_students_per_class}</h3>
-              <small className="text-muted">Avg Students/Class</small>
-            </Col>
-          </Row>
-        </CardBody>
+          </h2>
+        </Card.Header>
+        <Card.Body>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold text-blue-600 mb-2">{profile.statistics.total_assignments}</div>
+              <div className="text-sm text-gray-600">Total Assignments</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-purple-600 mb-2">{profile.statistics.unique_zones}</div>
+              <div className="text-sm text-gray-600">Unique Zones</div>
+            </div>
+            <div className="text-center">
+              <div className="text-3xl font-bold text-green-600 mb-2">{profile.statistics.avg_students_per_class}</div>
+              <div className="text-sm text-gray-600">Avg Students/Class</div>
+            </div>
+          </div>
+        </Card.Body>
       </Card>
 
       {/* Students Modal */}
-      <Modal show={showStudentsModal} onHide={() => setShowStudentsModal(false)} size="xl">
-        <Modal.Header closeButton>
-          <Modal.Title>
-            <FiUsers className="me-2" />
-            Students - {selectedClass?.class?.name}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedClass && (
-            <div>
-              {/* Zone Controls */}
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                  <strong>Total Students:</strong> {selectedClass.student_count}
-                </div>
-                <div>
-                  {!zoneUpdateMode ? (
-                    <Button 
-                      variant="outline-primary" 
-                      size="sm"
-                      onClick={() => setZoneUpdateMode(true)}
-                    >
-                      <FiEdit2 className="me-1" />
-                      Edit Zones
-                    </Button>
-                  ) : (
-                    <div>
-                      <Button 
-                        variant="success" 
-                        size="sm"
-                        onClick={() => handleZoneUpdate(selectedClass.class._id)}
-                        className="me-2"
-                      >
-                        Save Changes
-                      </Button>
-                      <Button 
-                        variant="secondary" 
-                        size="sm"
-                        onClick={() => {
-                          setZoneUpdateMode(false);
-                          setZoneUpdates({});
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Students List */}
-              <div className="students-grid">
-                {selectedClass.students.map((student, index) => (
-                  <div key={index} className="border rounded p-2 mb-2">
-                    <Row>
-                      <Col md={4}>
-                        <strong>{student.full_name}</strong>
-                        <br />
-                        <small className="text-muted">{student.roll_number}</small>
-                      </Col>
-                      <Col md={4}>
-                        <small className="text-muted">{student.section}</small>
-                      </Col>
-                      <Col md={4} className="text-end">
-                        {zoneUpdateMode ? (
-                          <Form.Select
-                            size="sm"
-                            value={zoneUpdates[student.student_id] || student.zone || ''}
-                            onChange={(e) => handleZoneChange(student.student_id, e.target.value)}
-                          >
-                            <option value="">Unassigned</option>
-                            <option value="blue">Blue</option>
-                            <option value="red">Red</option>
-                            <option value="green">Green</option>
-                          </Form.Select>
-                        ) : (
-                          <Badge bg={getZoneColor(student.zone)}>
-                            {(student.zone || 'unassigned').toUpperCase()}
-                          </Badge>
-                        )}
-                      </Col>
-                    </Row>
-                  </div>
-                ))}
-              </div>
+      {showStudentsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold flex items-center">
+                <FiUsers className="mr-2" />
+                Students - {selectedClass?.class?.name}
+              </h3>
+              <button 
+                onClick={() => setShowStudentsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <FiX size={20} />
+              </button>
             </div>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowStudentsModal(false)}>
-            Close
-          </Button>
-        </Modal.Footer>
-      </Modal>
+            <div className="p-6">
+              {selectedClass && (
+                <div>
+                  {/* Zone Controls */}
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <span className="font-medium">Total Students:</span> {selectedClass.student_count}
+                    </div>
+                    <div>
+                      {!zoneUpdateMode ? (
+                        <button 
+                          className="inline-flex items-center px-3 py-2 border border-blue-300 text-blue-700 text-sm rounded-md hover:bg-blue-50 transition-colors"
+                          onClick={() => setZoneUpdateMode(true)}
+                        >
+                          <FiEdit2 className="mr-1" />
+                          Edit Zones
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button 
+                            className="px-3 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
+                            onClick={() => handleZoneUpdate(selectedClass.class._id)}
+                          >
+                            Save Changes
+                          </button>
+                          <button 
+                            className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
+                            onClick={() => {
+                              setZoneUpdateMode(false);
+                              setZoneUpdates({});
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Students List */}
+                  <div className="space-y-3">
+                    {selectedClass.students.map((student, index) => (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <div className="font-semibold text-gray-900">{student.full_name}</div>
+                            <div className="text-sm text-gray-600">{student.roll_number}</div>
+                          </div>
+                          <div>
+                            <div className="text-sm text-gray-600">{student.section}</div>
+                          </div>
+                          <div className="text-right">
+                            {zoneUpdateMode ? (
+                              <select
+                                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+                                value={zoneUpdates[student.student_id] || student.zone || ''}
+                                onChange={(e) => handleZoneChange(student.student_id, e.target.value)}
+                              >
+                                <option value="">Unassigned</option>
+                                <option value="blue">Blue</option>
+                                <option value="red">Red</option>
+                                <option value="green">Green</option>
+                              </select>
+                            ) : (
+                              <span className={`inline-block px-2 py-1 text-xs rounded-full border ${getZoneColor(student.zone)}`}>
+                                {(student.zone || 'unassigned').toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end p-6 border-t border-gray-200">
+              <button 
+                onClick={() => setShowStudentsModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
