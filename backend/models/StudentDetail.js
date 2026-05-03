@@ -6,12 +6,10 @@ const studentDetailSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      unique: true,
     },
     roll_number: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     class_id: {
@@ -35,7 +33,8 @@ const studentDetailSchema = new mongoose.Schema(
   }
 );
 
-studentDetailSchema.index({ user_id: 1 });
+studentDetailSchema.index({ user_id: 1 }, { unique: true });
+studentDetailSchema.index({ roll_number: 1 }, { unique: true });
 studentDetailSchema.index({ class_id: 1 });
 studentDetailSchema.index({ user_id: 1, class_id: 1 });
 

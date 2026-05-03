@@ -34,11 +34,15 @@ const wildcardPatternToRegex = (pattern) => {
 const defaultAllowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://lms-2026-pi.vercel.app'
+  'http://localhost:5175',
+  'http://127.0.0.1:5175',
+  'https://lms-2026-pi.vercel.app',
+  'https://lms-2026-mongodb-migrated.vercel.app'
 ];
 
 const defaultAllowedOriginPatterns = [
-  /^https:\/\/lms-2026-[a-z0-9-]+\.vercel\.app$/i
+  /^https:\/\/lms-2026-[a-z0-9-]+\.vercel\.app$/i,
+  /^https:\/\/lms-2026-mongodb-migrated-[a-z0-9-]+\.vercel\.app$/i
 ];
 
 const allowedOrigins = parseCsvEnv(process.env.FRONTEND_URLS || process.env.FRONTEND_URL);
