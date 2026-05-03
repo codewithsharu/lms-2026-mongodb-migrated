@@ -1,0 +1,41 @@
+const mongoose = require('mongoose');
+
+const studentDetailSchema = new mongoose.Schema(
+  {
+    user_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      unique: true,
+    },
+    roll_number: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+    class_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Class',
+      default: null,
+    },
+    section_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Section',
+      default: null,
+    },
+    zone: {
+      type: String,
+      enum: ['blue', 'red', 'green', null],
+      default: null,
+    },
+  },
+  {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+  }
+);
+
+studentDetailSchema.index({ user_id: 1 });
+studentDetailSchema.index({ class_id: 1 });
+
+module.exports = mongoose.model('StudentDetail', studentDetailSchema);
