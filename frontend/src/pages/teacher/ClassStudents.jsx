@@ -1,599 +1,319 @@
 import { useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { FiArrowLeft, FiEdit2, FiTrash2, FiX, FiSearch, FiUsers, FiLayers } from 'react-icons/fi';
+import { FiArrowLeft, FiSearch, FiUsers, FiAlertCircle } from 'react-icons/fi';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  InputAdornment,
+  TextField,
+  Box,
+  Typography
+} from '@mui/material';
 import Layout from '../../components/Layout';
-import { teacherAPI, classAPI } from '../../services/api';
-import Alert from '../../components/ui/Alert';
+import { classAPI } from '../../services/api';
 
-const getZoneBadgeClass = (zoneValue) => {
-  const normalized = String(zoneValue || '').toLowerCase();
-  if (normalized === 'blue') return 'status-badge info';
-  if (normalized === 'red') return 'status-badge error';
-  if (normalized === 'green') return 'status-badge success';
-  return 'status-badge warning';
+/* ─── helpers ───────────────────────────────────────────────────────────────── */
+
+const ZONE_CONFIG = {
+  blue:  { dot: '#3B82F6', bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', label: 'Blue'  },
+  red:   { dot: '#EF4444', bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA', label: 'Red'   },
+  green: { dot: '#22C55E', bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0', label: 'Green' },
 };
+
+const ZoneBadge = ({ zone }) => {
+  const cfg = ZONE_CONFIG[String(zone || '').toLowerCase()];
+  if (!cfg) return (
+    <span style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B', borderRadius: 99, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>
+      {zone || 'N/A'}
+    </span>
+  );
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.text, borderRadius: 99, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: cfg.dot, flexShrink: 0 }} />
+      {cfg.label}
+    </span>
+  );
+};
+
+const Avatar = ({ name }) => {
+  const COLORS = [
+    ['#EFF6FF', '#2563EB'], ['#FFF7ED', '#EA580C'], ['#F0FDF4', '#16A34A'],
+    ['#FDF4FF', '#9333EA'], ['#FFFBEB', '#D97706'], ['#F0F9FF', '#0284C7'],
+  ];
+  if (!name) return null;
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const idx = name.charCodeAt(0) % COLORS.length;
+  const [bg, fg] = COLORS[idx];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 34, height: 34, borderRadius: 10, background: bg, color: fg,
+      fontWeight: 700, fontSize: 13, flexShrink: 0, border: `1px solid ${fg}33`,
+    }}>
+      {initials}
+    </span>
+  );
+};
+
+/* ─── component ─────────────────────────────────────────────────────────────── */
 
 const TeacherClassStudents = () => {
   const { classId, sectionId } = useParams();
   const location = useLocation();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedZoneFilter, setSelectedZoneFilter] = useState('');
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [formLoading, setFormLoading] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [editFormData, setEditFormData] = useState({
-    full_name: '',
-    email: '',
-    phone: '',
-    roll_number: '',
-    section_id: '',
-    zone: ''
-  });
-  const [assignedData, setAssignedData] = useState({
-    assignments: [],
-    summary: {
-      total_assignments: 0,
-      total_students: 0
-    }
-  });
 
-  const fetchAssignedStudents = async () => {
+  const [loading,            setLoading]            = useState(true);
+  const [error,              setError]              = useState('');
+  const [searchQuery,        setSearchQuery]        = useState('');
+  const [selectedZoneFilter, setSelectedZoneFilter] = useState('all');
+  const [students,           setStudents]           = useState([]);
+
+  const className   = location.state?.className   || 'Class Students';
+  const sectionName = location.state?.sectionName || (sectionId === 'all' ? 'All Sections' : 'Section');
+
+  const fetchStudents = async () => {
     try {
       setLoading(true);
       setError('');
-      console.log('Fetching students for classId:', classId);
-      const response = await classAPI.getStudents(classId);
-      console.log('API response:', response);
-      setAssignedData({
-        assignments: [{
-          class: { id: classId, name: 'Class Students' },
-          students: response.data || []
-        }],
-        summary: {
-          total_assignments: 1,
-          total_students: response.data?.length || 0
-        }
-      });
-    } catch (fetchError) {
-      console.error('Fetch error:', fetchError);
-      setError(fetchError.response?.data?.error || 'Failed to load class students');
+      const res = await classAPI.getStudents(classId);
+      let data = res.data || [];
+      // filter by section if not "all"
+      if (sectionId && sectionId !== 'all') {
+        data = data.filter(s => s.section?.id === sectionId || String(s.section_id) === sectionId);
+      }
+      setStudents(data);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to load students');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchAssignedStudents();
-  }, []);
+  useEffect(() => { fetchStudents(); }, [classId, sectionId]);
 
-  const classAssignments = useMemo(() => {
-    return (assignedData.assignments || []).filter((assignment) => {
-      if (assignment.class?.id !== classId) {
-        return false;
-      }
-
-      if (sectionId === 'all') {
-        return true;
-      }
-
-      return assignment.section?.id === sectionId;
-    });
-  }, [assignedData.assignments, classId, sectionId]);
-
-  const className = useMemo(() => {
-    if (location.state?.className) {
-      return location.state.className;
-    }
-
-    return classAssignments[0]?.class?.name || 'Class Students';
-  }, [location.state, classAssignments]);
-
-  const sectionName = useMemo(() => {
-    if (location.state?.sectionName) {
-      return location.state.sectionName;
-    }
-
-    if (sectionId === 'all') {
-      return 'All Sections';
-    }
-
-    return classAssignments[0]?.section?.name || 'Section';
-  }, [location.state, sectionId, classAssignments]);
-
-  const students = useMemo(() => {
-    const uniqueStudents = new Map();
-
-    classAssignments.forEach((assignment) => {
-      (assignment.students || []).forEach((student) => {
-        if (!uniqueStudents.has(student.id)) {
-          uniqueStudents.set(student.id, {
-            ...student,
-            zones: new Set(),
-            sections: new Set(),
-            sectionIds: new Set(),
-            rawSectionId: student.section?.id || null,
-            rawZone: student.zone || null
-          });
-        }
-
-        const existingStudent = uniqueStudents.get(student.id);
-        existingStudent.zones.add(student.zone || 'N/A');
-        existingStudent.sections.add(student.section?.name || 'N/A');
-        if (student.section?.id) {
-          existingStudent.sectionIds.add(student.section.id);
-        }
-        if (!existingStudent.rawSectionId && student.section?.id) {
-          existingStudent.rawSectionId = student.section.id;
-        }
-        if (!existingStudent.rawZone && student.zone) {
-          existingStudent.rawZone = student.zone;
-        }
-      });
-    });
-
-    return Array.from(uniqueStudents.values()).map((student) => ({
-      ...student,
-      zones: Array.from(student.zones),
-      sections: Array.from(student.sections),
-      sectionIds: Array.from(student.sectionIds)
-    }));
-  }, [classAssignments]);
-
-  const filteredStudents = useMemo(() => {
-    let filtered = students;
-    
-    // Apply search filter
-    const query = searchQuery.trim().toLowerCase();
-    if (query) {
-      filtered = filtered.filter((student) => {
-        const fullName = String(student.full_name || '').toLowerCase();
-        const email = String(student.email || '').toLowerCase();
-        const rollNumber = String(student.roll_number || '').toLowerCase();
-        return fullName.includes(query) || email.includes(query) || rollNumber.includes(query);
+  const filtered = useMemo(() => {
+    let list = students;
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(s => {
+        const name = s.user?.full_name || s.full_name || '';
+        const email = s.user?.email || s.email || '';
+        return name.toLowerCase().includes(q) ||
+               email.toLowerCase().includes(q) ||
+               String(s.roll_number || '').toLowerCase().includes(q);
       });
     }
-    
-    // Apply zone filter
-    if (selectedZoneFilter) {
-      filtered = filtered.filter(student => student.zone === selectedZoneFilter);
+    if (selectedZoneFilter && selectedZoneFilter !== 'all') {
+      list = list.filter(s => String(s.zone || '').toLowerCase() === selectedZoneFilter);
     }
-    
-    return filtered;
+    return list;
   }, [students, searchQuery, selectedZoneFilter]);
 
-  const availableSections = useMemo(() => {
-    const sectionMap = new Map();
+  const zones = useMemo(() => {
+    const s = new Set(students.map(s => String(s.zone || '').toLowerCase()).filter(Boolean));
+    return Array.from(s);
+  }, [students]);
 
-    classAssignments.forEach((assignment) => {
-      if (assignment.section?.id) {
-        sectionMap.set(assignment.section.id, assignment.section.name);
-      }
-    });
-
-    return Array.from(sectionMap.entries()).map(([id, name]) => ({ id, name }));
-  }, [classAssignments]);
-
-  const allowAllSections = useMemo(
-    () => classAssignments.some((assignment) => !assignment.section?.id),
-    [classAssignments]
+  /* ── skeleton ── */
+  if (loading) return (
+    <Layout>
+      <div className="app-page">
+        <div className="page-header">
+          <h1>{className}</h1>
+          <p>Loading students…</p>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 24 }}>
+          {[1,2,3,4,5].map(i => (
+            <div key={i} style={{ height: 44, background: '#F8FAFC', borderRadius: 8, marginBottom: 10, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          ))}
+        </div>
+      </div>
+    </Layout>
   );
-
-  const availableZones = useMemo(() => {
-    const zoneSet = new Set();
-
-    classAssignments.forEach((assignment) => {
-      if (assignment.zone) {
-        zoneSet.add(assignment.zone);
-      }
-    });
-
-    return Array.from(zoneSet);
-  }, [classAssignments]);
-
-  const allowAllZones = useMemo(
-    () => classAssignments.some((assignment) => !assignment.zone),
-    [classAssignments]
-  );
-
-  const openEditModal = (student) => {
-    setSelectedStudent(student);
-    setEditFormData({
-      full_name: student.full_name || '',
-      email: student.email || '',
-      phone: student.phone || '',
-      roll_number: student.roll_number || '',
-      section_id: student.rawSectionId || '',
-      zone: student.rawZone || ''
-    });
-    setShowEditModal(true);
-  };
-
-  const closeEditModal = () => {
-    setShowEditModal(false);
-    setSelectedStudent(null);
-    setFormLoading(false);
-  };
-
-  const openDeleteModal = (student) => {
-    setSelectedStudent(student);
-    setShowDeleteModal(true);
-  };
-
-  const closeDeleteModal = () => {
-    setShowDeleteModal(false);
-    setSelectedStudent(null);
-    setFormLoading(false);
-  };
-
-  const handleUpdateStudent = async (event) => {
-    event.preventDefault();
-
-    if (!selectedStudent) {
-      return;
-    }
-
-    try {
-      setFormLoading(true);
-      await classAPI.updateStudentZone(selectedStudent.id, {
-        full_name: editFormData.full_name,
-        email: editFormData.email,
-        phone: editFormData.phone || null,
-        roll_number: editFormData.roll_number,
-        section_id: editFormData.section_id || null,
-        zone: editFormData.zone || null
-      });
-
-      toast.success('Student updated successfully');
-      closeEditModal();
-      fetchAssignedStudents();
-    } catch (updateError) {
-      toast.error(updateError.response?.data?.error || 'Failed to update student');
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
-  const handleDeleteStudent = async () => {
-    if (!selectedStudent) {
-      return;
-    }
-
-    try {
-      setFormLoading(true);
-      await classAPI.deleteStudent(classId, selectedStudent.id);
-      toast.success('Student removed successfully');
-      closeDeleteModal();
-      fetchAssignedStudents();
-    } catch (deleteError) {
-      toast.error(deleteError.response?.data?.error || 'Failed to remove student');
-    } finally {
-      setFormLoading(false);
-    }
-  };
 
   return (
     <Layout>
       <div className="app-page">
-        <div className="page-header flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
+        {/* ── Header ── */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <h1>{className} Students</h1>
-            <p>Section: {sectionName}</p>
+            <h1 className="page-header" style={{ margin: 0, fontSize: '1.75rem', fontWeight: 600, color: '#111827' }}>
+              {className}
+            </h1>
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>Section:</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: 99, padding: '1px 10px' }}>
+                {sectionName}
+              </span>
+            </div>
           </div>
           <Link
             to="/teacher/classes"
-            className="btn btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#374151', textDecoration: 'none', transition: 'background 0.15s' }}
           >
-            <FiArrowLeft className="w-4 h-4" />
-            <span>Back to My Classes</span>
+            <FiArrowLeft style={{ width: 14, height: 14 }} />
+            Back to My Classes
           </Link>
         </div>
 
-        <div className="surface-card p-6">
-          {loading && (
-            <div className="space-y-3">
-              {[...Array(5)].map((_, index) => (
-                <div key={index} className="h-12 bg-gray-100 rounded-xl animate-pulse"></div>
-              ))}
-            </div>
-          )}
+        {/* ── Error ── */}
+        {error && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '14px 16px', color: '#B91C1C', marginBottom: 16 }}>
+            <FiAlertCircle style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: 14 }}>{error}</span>
+          </div>
+        )}
 
-          {!loading && error && (
-            <Alert type="error">{error}</Alert>
-          )}
+        {/* ── Main Panel ── */}
+        {!error && (
+          <Paper elevation={0} sx={{ border: '1px solid #E5E7EB', borderRadius: '16px', overflow: 'hidden' }}>
 
-          {!loading && !error && classAssignments.length === 0 && (
-            <p className="text-gray-500">No class assignment found for this class.</p>
-          )}
+            {/* Panel toolbar */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
 
-          {!loading && !error && classAssignments.length > 0 && (
-            <>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="surface-card-muted p-3">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Total Students</p>
-                  <p className="mt-1 flex items-center gap-1.5 text-lg font-semibold text-primary">
-                    <FiUsers className="h-4 w-4" />
-                    {students.length}
-                  </p>
-                </div>
-                <div className="surface-card-muted p-3">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Selected Section</p>
-                  <p className="mt-1 text-lg font-semibold text-gray-800">{sectionName}</p>
-                </div>
-                <div className="surface-card-muted p-3">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Assignment Scope</p>
-                  <p className="mt-1 flex items-center gap-1.5 text-lg font-semibold text-gray-800">
-                    <FiLayers className="h-4 w-4 text-primary" />
-                    {classAssignments.length}
-                  </p>
-                </div>
+              {/* Stats */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: '#374151' }}>
+                  <FiUsers style={{ color: '#2563EB', width: 16, height: 16 }} />
+                  {filtered.length} of {students.length} students
+                </span>
               </div>
 
-              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <p className="text-sm text-gray-500">
-                  Search by student name, email, or roll number. Showing {filteredStudents.length} of {students.length}.
-                </p>
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:w-auto">
-                  <div className="relative w-full md:w-80">
-                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Search students"
-                      className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">Zone Filter:</span>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setSelectedZoneFilter('')}
-                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                          selectedZoneFilter === '' 
-                            ? 'bg-primary text-white border-primary' 
-                            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        All Zones
-                      </button>
-                      {['blue', 'red', 'green'].map(zone => (
-                        <button
-                          key={zone}
-                          onClick={() => setSelectedZoneFilter(zone)}
-                          className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                            selectedZoneFilter === zone 
-                              ? 'bg-blue-500 text-white border-blue-500' 
-                              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                          }`}
+              {/* Search + Zone Filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <TextField
+                  size="small"
+                  placeholder="Search name, email, roll…"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <FiSearch style={{ color: '#9CA3AF' }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{ width: 260, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
+                />
+
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <InputLabel id="zone-filter-label" sx={{ fontSize: '14px' }}>Zone Filter</InputLabel>
+                  <Select
+                    labelId="zone-filter-label"
+                    value={selectedZoneFilter}
+                    label="Zone Filter"
+                    onChange={(e) => setSelectedZoneFilter(e.target.value)}
+                    sx={{ borderRadius: '10px', fontSize: '14px' }}
+                  >
+                    <MenuItem value="all">All Zones</MenuItem>
+                    {zones.map(z => (
+                      <MenuItem key={z} value={z}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: ZONE_CONFIG[z]?.dot || '#CCC' }} />
+                          {z.charAt(0).toUpperCase() + z.slice(1)}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </div>
+            </div>
+
+            {/* Empty state */}
+            {filtered.length === 0 && (
+              <div style={{ padding: '64px 24px', textAlign: 'center', color: '#9CA3AF', fontSize: 15 }}>
+                {students.length === 0 ? 'No students found in this section.' : 'No students match your search.'}
+              </div>
+            )}
+
+            {/* Table */}
+            {filtered.length > 0 && (
+              <TableContainer>
+                <Table sx={{ minWidth: 650 }}>
+                  <TableHead sx={{ backgroundColor: '#F9FAFB' }}>
+                    <TableRow>
+                      {['Student', 'Email', 'Roll No.', 'Section', 'Zone'].map((h, i) => (
+                        <TableCell key={h} sx={{ 
+                          fontSize: 11, 
+                          fontWeight: 600, 
+                          color: '#6B7280', 
+                          textTransform: 'uppercase', 
+                          letterSpacing: '0.06em', 
+                          py: 2,
+                          px: i === 0 ? 3 : 2
+                        }}>
+                          {h}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filtered.map((student, i) => {
+                      const fullName = student.user?.full_name || student.full_name || 'Unknown';
+                      const email = student.user?.email || student.email || '—';
+                      const phone = student.user?.phone || student.phone || '';
+
+                      return (
+                        <TableRow
+                          key={student.id || i}
+                          hover
+                          sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                         >
-                          <div className={`w-2 h-2 rounded-full mr-1 ${
-                            zone === 'blue' ? 'bg-blue-500' : 
-                            zone === 'red' ? 'bg-red-500' : 
-                            'bg-green-500'
-                          }`} />
-                          {zone.charAt(0).toUpperCase() + zone.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {students.length === 0 ? (
-                <p className="text-gray-500">No students found in this class for your assignment scope.</p>
-              ) : filteredStudents.length === 0 ? (
-                <p className="text-gray-500">No students match your search.</p>
-              ) : (
-                <div className="table-shell overflow-x-auto">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Student</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Roll No.</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sections</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Zones</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {filteredStudents.map((student) => (
-                        <tr key={student.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-medium text-gray-800">{student.full_name}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{student.email}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{student.roll_number}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            <div className="flex flex-wrap gap-1.5">
-                              {student.sections.map((sectionName) => (
-                                <span key={`${student.id}-${sectionName}`} className="status-badge info">
-                                  {sectionName}
-                                </span>
-                              ))}
+                          <TableCell sx={{ pl: 3 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <Avatar name={fullName} />
+                              <div>
+                                <Typography sx={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>
+                                  {fullName}
+                                </Typography>
+                                {phone && (
+                                  <Typography sx={{ fontSize: 12, color: '#6B7280' }}>
+                                    {phone}
+                                  </Typography>
+                                )}
+                              </div>
                             </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            <div className="flex flex-wrap gap-1.5">
-                              {student.zones.map((zoneName) => (
-                                <span
-                                  key={`${student.id}-${zoneName}`}
-                                  className={`${getZoneBadgeClass(zoneName)} capitalize`}
-                                >
-                                  {String(zoneName).toLowerCase()}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => openEditModal(student)}
-                                className="h-9 w-9 p-0 inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                                title="Edit Student"
-                              >
-                                <FiEdit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => openDeleteModal(student)}
-                                className="h-9 w-9 p-0 inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                                title="Remove Student"
-                              >
-                                <FiTrash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 13, color: '#374151' }}>{email}</TableCell>
+                          <TableCell sx={{ fontSize: 13, color: '#374151', fontFamily: 'monospace' }}>
+                            {student.roll_number || '—'}
+                          </TableCell>
+                          <TableCell>
+                            {student.section?.name ? (
+                              <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: 99, padding: '3px 10px' }}>
+                                {student.section.name}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#9CA3AF', fontSize: 13 }}>—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {student.zone ? (
+                              <ZoneBadge zone={student.zone} />
+                            ) : (
+                              <span style={{ color: '#9CA3AF', fontSize: 13 }}>—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
 
-        {showEditModal && selectedStudent && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="hide-scrollbar overflow-x-hidden bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-800">Edit Student</h2>
-                <button onClick={closeEditModal} className="p-2 hover:bg-gray-100 rounded-lg">
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleUpdateStudent} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editFormData.full_name}
-                    onChange={(event) => setEditFormData((prev) => ({ ...prev, full_name: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                  <input
-                    type="email"
-                    required
-                    value={editFormData.email}
-                    onChange={(event) => setEditFormData((prev) => ({ ...prev, email: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input
-                    type="tel"
-                    value={editFormData.phone}
-                    onChange={(event) => setEditFormData((prev) => ({ ...prev, phone: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Roll Number *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editFormData.roll_number}
-                    onChange={(event) => setEditFormData((prev) => ({ ...prev, roll_number: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Section {allowAllSections ? '(optional)' : '*'}
-                  </label>
-                  <select
-                    required={!allowAllSections}
-                    value={editFormData.section_id}
-                    onChange={(event) => setEditFormData((prev) => ({ ...prev, section_id: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                  >
-                    <option value="">{allowAllSections ? 'All Sections' : 'Select Section'}</option>
-                    {availableSections.map((section) => (
-                      <option key={section.id} value={section.id}>{section.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Zone {allowAllZones ? '(optional)' : '*'}
-                  </label>
-                  <select
-                    required={!allowAllZones}
-                    value={editFormData.zone}
-                    onChange={(event) => setEditFormData((prev) => ({ ...prev, zone: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                  >
-                    <option value="">{allowAllZones ? 'All Zones' : 'Select Zone'}</option>
-                    {(allowAllZones ? ['blue', 'red', 'green'] : availableZones).map((zoneValue) => (
-                      <option key={zoneValue} value={zoneValue}>
-                        {zoneValue.charAt(0).toUpperCase() + zoneValue.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={closeEditModal}
-                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={formLoading}
-                    className="flex-1 px-4 py-3 bg-primary hover:bg-primary-dark text-white rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    {formLoading ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          </Paper>
         )}
 
-        {showDeleteModal && selectedStudent && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md p-6">
-              <h2 className="text-xl font-semibold text-gray-800">Remove Student</h2>
-              <p className="text-gray-600 mt-2">
-                Are you sure you want to remove <span className="font-semibold">{selectedStudent.full_name}</span>?
-              </p>
-
-              <div className="flex gap-3 pt-6">
-                <button
-                  type="button"
-                  onClick={closeDeleteModal}
-                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteStudent}
-                  disabled={formLoading}
-                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors disabled:opacity-50"
-                >
-                  {formLoading ? 'Removing...' : 'Remove'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </Layout>
   );

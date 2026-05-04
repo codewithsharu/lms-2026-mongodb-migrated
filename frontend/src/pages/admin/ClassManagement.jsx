@@ -20,6 +20,7 @@ const ClassManagement = () => {
   const [showClassModal, setShowClassModal] = useState(false);
   const [classForm, setClassForm] = useState({ name: '', description: '', academic_year: '' });
   const [formLoading, setFormLoading] = useState(false);
+  const [classErrors, setClassErrors] = useState({});
 
   useEffect(() => {
     fetchClasses();
@@ -39,6 +40,14 @@ const ClassManagement = () => {
 
   const handleCreateClass = async (e) => {
     e.preventDefault();
+    const errors = {};
+    if (!classForm.name.trim()) errors.name = 'Class name is required';
+    if (!classForm.description.trim()) errors.description = 'Description is required';
+    if (!classForm.academic_year.trim()) errors.academic_year = 'Academic year is required';
+
+    setClassErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setFormLoading(true);
 
     try {
@@ -56,13 +65,22 @@ const ClassManagement = () => {
 
   const resetClassForm = () => {
     setClassForm({ name: '', description: '', academic_year: '' });
+    setClassErrors({});
+  };
+
+  const getCountValue = (value, fallback = 0) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
   };
 
   const totals = classes.reduce(
     (acc, cls) => {
-      acc.sections += Number(cls.section_count || 0);
-      acc.students += Number(cls.student_count || 0);
-      acc.teachers += Number(cls.teacher_count || 0);
+      const sectionsCount = cls.section_count ?? cls.sections?.length ?? 0;
+      const studentsCount = cls.student_count ?? cls.students?.length ?? 0;
+      const teachersCount = cls.teacher_count ?? cls.teachers?.length ?? 0;
+      acc.sections += getCountValue(sectionsCount, 0);
+      acc.students += getCountValue(studentsCount, 0);
+      acc.teachers += getCountValue(teachersCount, 0);
       return acc;
     },
     { sections: 0, students: 0, teachers: 0 }
@@ -150,9 +168,9 @@ const ClassManagement = () => {
                     </div>
 
                     <div className="mt-4 space-y-1 text-sm text-slate-600">
-                      <p>{cls.section_count} sections</p>
-                      <p>{cls.student_count} students</p>
-                      <p>{cls.teacher_count} teachers</p>
+                      <p>{getCountValue(cls.section_count ?? cls.sections?.length ?? 0)} sections</p>
+                      <p>{getCountValue(cls.student_count ?? cls.students?.length ?? 0)} students</p>
+                      <p>{getCountValue(cls.teacher_count ?? cls.teachers?.length ?? 0)} teachers</p>
                     </div>
 
                     <div className="mt-4">
@@ -204,26 +222,44 @@ const ClassManagement = () => {
             label="Class Name *"
             required
             value={classForm.name}
-            onChange={(e) => setClassForm({ ...classForm, name: e.target.value })}
+            onChange={(e) => {
+              setClassForm({ ...classForm, name: e.target.value });
+              if (classErrors.name) {
+                setClassErrors((prev) => ({ ...prev, name: '' }));
+              }
+            }}
             placeholder="e.g., CSE-2024"
           />
+          {classErrors.name && <p className="mt-1 text-xs text-red-600">{classErrors.name}</p>}
 
           <div>
             <label className="form-label">Description</label>
             <textarea
               value={classForm.description}
-              onChange={(e) => setClassForm({ ...classForm, description: e.target.value })}
+              onChange={(e) => {
+                setClassForm({ ...classForm, description: e.target.value });
+                if (classErrors.description) {
+                  setClassErrors((prev) => ({ ...prev, description: '' }));
+                }
+              }}
               className="form-input min-h-[100px] resize-y"
               placeholder="Class description"
             />
+            {classErrors.description && <p className="mt-1 text-xs text-red-600">{classErrors.description}</p>}
           </div>
 
           <InputField
             label="Academic Year"
             value={classForm.academic_year}
-            onChange={(e) => setClassForm({ ...classForm, academic_year: e.target.value })}
+            onChange={(e) => {
+              setClassForm({ ...classForm, academic_year: e.target.value });
+              if (classErrors.academic_year) {
+                setClassErrors((prev) => ({ ...prev, academic_year: '' }));
+              }
+            }}
             placeholder="e.g., 2024-2025"
           />
+          {classErrors.academic_year && <p className="mt-1 text-xs text-red-600">{classErrors.academic_year}</p>}
         </form>
       </Modal>
     </Layout>

@@ -1,676 +1,329 @@
 import { useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { FiBookOpen, FiLayers, FiUsers, FiPlus, FiX, FiUser, FiMail, FiEye, FiUpload, FiSearch } from 'react-icons/fi';
+import { FiBook, FiUsers, FiLayers, FiAlertCircle, FiArrowRight, FiSearch, FiInbox } from 'react-icons/fi';
 import Layout from '../../components/Layout';
 import { teacherAPI } from '../../services/api';
-import Alert from '../../components/ui/Alert';
+
+/* ─── helpers ─────────────────────────────────────────────────────────────── */
+
+const ZONE_CONFIG = {
+  blue:  { dot: '#3B82F6', bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE', label: 'Blue' },
+  red:   { dot: '#EF4444', bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA', label: 'Red'  },
+  green: { dot: '#22C55E', bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0', label: 'Green' },
+};
+
+const ZoneBadge = ({ zone }) => {
+  const cfg = ZONE_CONFIG[String(zone).toLowerCase()];
+  if (!cfg) return (
+    <span style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B', borderRadius: 99, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>
+      {zone}
+    </span>
+  );
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.text, borderRadius: 99, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: cfg.dot, flexShrink: 0 }} />
+      {cfg.label}
+    </span>
+  );
+};
+
+const ClassInitials = ({ name, index }) => {
+  const COLORS = [
+    ['#EFF6FF', '#2563EB'], ['#FFF7ED', '#EA580C'], ['#F0FDF4', '#16A34A'],
+    ['#FDF4FF', '#9333EA'], ['#FFFBEB', '#D97706'], ['#F0F9FF', '#0284C7'],
+  ];
+  const [bg, fg] = COLORS[index % COLORS.length];
+  const initials = name
+    ? name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
+    : '?';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 44, height: 44, borderRadius: 12, background: bg,
+      color: fg, fontWeight: 700, fontSize: 15, flexShrink: 0, letterSpacing: '-0.02em',
+      border: `1.5px solid ${fg}22`
+    }}>
+      {initials}
+    </span>
+  );
+};
+
+/* ─── main component ───────────────────────────────────────────────────────── */
 
 const TeacherClasses = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
-  const [formLoading, setFormLoading] = useState(false);
-  const [selectedClassForAdd, setSelectedClassForAdd] = useState(null);
-  const [showBulkModal, setShowBulkModal] = useState(false);
-  const [selectedClassForBulk, setSelectedClassForBulk] = useState(null);
-  const [bulkFile, setBulkFile] = useState(null);
-  const [bulkPreview, setBulkPreview] = useState(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [importLoading, setImportLoading] = useState(false);
-  const [studentFormData, setStudentFormData] = useState({
-    full_name: '',
-    email: '',
-    phone: '',
-    roll_number: '',
-    section_id: '',
-    zone: ''
-  });
-  const [assignedData, setAssignedData] = useState({
-    assignments: [],
-    summary: {
-      total_assignments: 0,
-      total_students: 0
-    }
-  });
-
-  const fetchAssignedData = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const response = await teacherAPI.getAssignedStudents();
-      const data = response.data || {};
-      setAssignedData({
-        assignments: data.assignments || [],
-        summary: {
-          total_assignments: data.summary?.total_assignments || 0,
-          total_students: data.summary?.total_students || 0
-        }
-      });
-    } catch (fetchError) {
-      setError(fetchError.response?.data?.error || 'Failed to load assigned classes');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
+  const [search, setSearch]     = useState('');
+  const [assignedData, setAssignedData] = useState({ assignments: [], summary: { total_assignments: 0, total_students: 0 } });
 
   useEffect(() => {
-    fetchAssignedData();
+    const fetch = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const res = await teacherAPI.getAssignedStudents();
+        const d = res.data || {};
+        setAssignedData({
+          assignments: d.assignments || [],
+          summary: { total_assignments: d.summary?.total_assignments || 0, total_students: d.summary?.total_students || 0 },
+        });
+      } catch (e) {
+        setError(e.response?.data?.error || 'Failed to load classes');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetch();
   }, []);
 
-  const classSummaries = useMemo(() => {
-    const classMap = new Map();
-
-    (assignedData.assignments || []).forEach((assignment) => {
-      const classId = assignment.class?.id || `unknown-${assignment.assignment_id}`;
-
-      if (!classMap.has(classId)) {
-        classMap.set(classId, {
+  /* Build one card per unique class+section pair */
+  const cards = useMemo(() => {
+    const map = new Map();
+    (assignedData.assignments || []).forEach(a => {
+      const classId   = a.class?.id   || 'unknown';
+      const sectionId = a.section?.id || '__none__';
+      const key = `${classId}::${sectionId}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
           classId,
-          className: assignment.class?.name || 'Unknown Class',
-          sectionsMap: new Map(),
+          sectionId: a.section?.id || null,
+          className:   a.class?.name   || 'Unknown Class',
+          sectionName: a.section?.name || 'All Sections',
           zones: new Set(),
-          allowAllSections: false,
-          allowAllZones: false,
-          totalStudents: 0
+          studentCount: 0,
         });
       }
-
-      const entry = classMap.get(classId);
-      const sectionId = assignment.section?.id || null;
-      const sectionKey = sectionId || '__all__';
-      entry.sectionsMap.set(sectionKey, {
-        id: sectionId,
-        name: assignment.section?.name || 'All Sections'
-      });
-
-      if (!sectionId) {
-        entry.allowAllSections = true;
-      }
-
-      entry.zones.add(assignment.zone || 'All Zones');
-
-      if (!assignment.zone) {
-        entry.allowAllZones = true;
-      }
-
-      entry.totalStudents += assignment.student_count || 0;
+      const card = map.get(key);
+      if (a.zone) card.zones.add(a.zone);
+      card.studentCount += a.student_count || 0;
     });
-
-    return Array.from(classMap.values()).map((entry) => ({
-      ...entry,
-      sections: Array.from(entry.sectionsMap.values()),
-      zones: Array.from(entry.zones)
-    }));
+    return Array.from(map.values()).map(c => ({ ...c, zones: Array.from(c.zones) }));
   }, [assignedData.assignments]);
 
-  const filteredClassSummaries = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return classSummaries;
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return cards;
+    return cards.filter(c =>
+      c.className.toLowerCase().includes(q) ||
+      c.sectionName.toLowerCase().includes(q)
+    );
+  }, [cards, search]);
 
-    return classSummaries.filter((item) => {
-      const className = item.className.toLowerCase();
-      const sectionText = item.sections.map((section) => section.name.toLowerCase()).join(' ');
-      return className.includes(query) || sectionText.includes(query);
-    });
-  }, [classSummaries, searchQuery]);
+  const totalClasses  = useMemo(() => new Set(cards.map(c => c.classId)).size, [cards]);
+  const totalSections = cards.length;
+  const totalStudents = assignedData.summary.total_students;
 
-  const openAddStudentModal = (classItem) => {
-    setSelectedClassForAdd(classItem);
-    setStudentFormData({
-      full_name: '',
-      email: '',
-      phone: '',
-      roll_number: '',
-      section_id: '',
-      zone: ''
-    });
-    setShowAddStudentModal(true);
-  };
-
-  const openStudentsView = (classItem, section = null) => {
-    const sectionParam = section?.id || 'all';
-
-    navigate(`/teacher/${classItem.classId}/${sectionParam}/students`, {
-      state: {
-        className: classItem.className,
-        sectionName: section?.name || 'All Sections'
-      }
+  const handleManage = (card, idx) => {
+    const sectionParam = card.sectionId || 'all';
+    navigate(`/teacher/${card.classId}/${sectionParam}/students`, {
+      state: { className: card.className, sectionName: card.sectionName },
     });
   };
 
-  const closeAddStudentModal = () => {
-    setShowAddStudentModal(false);
-    setSelectedClassForAdd(null);
-    setFormLoading(false);
-    setStudentFormData({
-      full_name: '',
-      email: '',
-      phone: '',
-      roll_number: '',
-      section_id: '',
-      zone: ''
-    });
-  };
-
-  const handleAddStudent = async (event) => {
-    event.preventDefault();
-
-    if (!selectedClassForAdd) {
-      return;
-    }
-
-    if (!selectedClassForAdd.allowAllSections && !studentFormData.section_id) {
-      toast.error('Section is required for this class assignment');
-      return;
-    }
-
-    if (!selectedClassForAdd.allowAllZones && !studentFormData.zone) {
-      toast.error('Zone is required for this class assignment');
-      return;
-    }
-
-    try {
-      setFormLoading(true);
-      const response = await teacherAPI.addStudentToClass(selectedClassForAdd.classId, {
-        full_name: studentFormData.full_name,
-        email: studentFormData.email,
-        phone: studentFormData.phone || null,
-        roll_number: studentFormData.roll_number,
-        section_id: studentFormData.section_id || null,
-        zone: studentFormData.zone || null
-      });
-
-      toast.success('Student added successfully');
-
-      if (response.data.generatedPassword) {
-        toast.success(`Password: ${response.data.generatedPassword}`, { duration: 10000 });
-      }
-
-      closeAddStudentModal();
-      fetchAssignedData();
-    } catch (submitError) {
-      toast.error(submitError.response?.data?.error || 'Failed to add student');
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
-  const openBulkModal = (classItem) => {
-    setSelectedClassForBulk(classItem);
-    setBulkFile(null);
-    setBulkPreview(null);
-    setShowBulkModal(true);
-  };
-
-  const closeBulkModal = () => {
-    setShowBulkModal(false);
-    setSelectedClassForBulk(null);
-    setBulkFile(null);
-    setBulkPreview(null);
-    setPreviewLoading(false);
-    setImportLoading(false);
-  };
-
-  const handleBulkPreview = async () => {
-    if (!selectedClassForBulk) return;
-
-    if (!bulkFile) {
-      toast.error('Please select a CSV file first');
-      return;
-    }
-
-    try {
-      setPreviewLoading(true);
-      const response = await teacherAPI.previewBulkStudents(selectedClassForBulk.classId, bulkFile);
-      setBulkPreview(response.data);
-
-      const readyCount = response.data?.summary?.ready || 0;
-      toast.success(`Preview ready: ${readyCount} row${readyCount === 1 ? '' : 's'} can be imported`);
-    } catch (previewError) {
-      toast.error(previewError.response?.data?.error || 'Failed to generate preview');
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handleBulkImport = async () => {
-    if (!selectedClassForBulk || !bulkPreview?.candidates?.length) {
-      toast.error('No valid rows available to import');
-      return;
-    }
-
-    try {
-      setImportLoading(true);
-      const response = await teacherAPI.importBulkStudents(selectedClassForBulk.classId, bulkPreview.candidates);
-      const createdCount = response.data?.summary?.created || 0;
-      const skippedCount = response.data?.summary?.skipped || 0;
-
-      toast.success(`Import finished: ${createdCount} created, ${skippedCount} skipped`);
-      closeBulkModal();
-      fetchAssignedData();
-    } catch (importError) {
-      toast.error(importError.response?.data?.error || 'Bulk import failed');
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  return (
+  /* ── skeleton ── */
+  if (loading) return (
     <Layout>
       <div className="app-page">
         <div className="page-header">
           <h1>My Classes</h1>
-          <p>View your assigned classes, sections and zone mapping.</p>
+          <p>Loading your assigned sections…</p>
         </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="min-h-[132px] bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="h-full flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm text-gray-500">Assigned Classes</p>
-                <p className="text-4xl font-bold text-gray-800 mt-2 leading-none">{loading ? '...' : classSummaries.length}</p>
-              </div>
-              <div className="w-12 h-12 min-w-12 min-h-12 shrink-0 bg-primary rounded-xl flex items-center justify-center">
-                <FiBookOpen className="w-6 h-6 text-white" />
-              </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          {[1,2,3].map(i => (
+            <div key={i} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 24, height: 180, animation: 'pulse 1.5s ease-in-out infinite' }}>
+              <div style={{ background: '#F1F5F9', borderRadius: 8, height: 16, width: '60%', marginBottom: 12 }} />
+              <div style={{ background: '#F1F5F9', borderRadius: 8, height: 12, width: '40%', marginBottom: 20 }} />
+              <div style={{ background: '#F1F5F9', borderRadius: 8, height: 28, width: '35%' }} />
             </div>
-          </div>
-
-          <div className="min-h-[132px] bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="h-full flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm text-gray-500">Class-Section Links</p>
-                <p className="text-4xl font-bold text-gray-800 mt-2 leading-none">{loading ? '...' : assignedData.summary.total_assignments}</p>
-              </div>
-              <div className="w-12 h-12 min-w-12 min-h-12 shrink-0 bg-yellow-500 rounded-xl flex items-center justify-center">
-                <FiLayers className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </div>
-
-          <div className="min-h-[132px] bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="h-full flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm text-gray-500">Total Students</p>
-                <p className="text-4xl font-bold text-gray-800 mt-2 leading-none">{loading ? '...' : assignedData.summary.total_students}</p>
-              </div>
-              <div className="w-12 h-12 min-w-12 min-h-12 shrink-0 bg-primary-dark rounded-xl flex items-center justify-center">
-                <FiUsers className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
-
-        <div className="surface-card p-6">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-gray-800">Assigned Class List</h2>
-            <div className="relative w-full md:w-80">
-              <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search class or section"
-                className="w-full rounded-xl border border-gray-300 py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-          </div>
-
-          {loading && (
-            <div className="space-y-3">
-              {[...Array(3)].map((_, index) => (
-                <div key={index} className="h-16 bg-gray-100 rounded-xl animate-pulse"></div>
-              ))}
-            </div>
-          )}
-
-          {!loading && error && (
-            <Alert type="error">{error}</Alert>
-          )}
-
-          {!loading && !error && classSummaries.length === 0 && (
-            <p className="text-gray-500">No class assignments found for your account.</p>
-          )}
-
-          {!loading && !error && classSummaries.length > 0 && filteredClassSummaries.length === 0 && (
-            <p className="text-gray-500">No classes match your search.</p>
-          )}
-
-          {!loading && !error && filteredClassSummaries.length > 0 && (
-            <div className="space-y-4">
-              {filteredClassSummaries.map((item) => (
-                <div key={item.classId} className="surface-card-muted p-4">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-800">{item.className}</p>
-                        <p className="text-xs text-gray-500">
-                          {item.sections.length} section option{item.sections.length === 1 ? '' : 's'} · {item.zones.length} zone option{item.zones.length === 1 ? '' : 's'}
-                        </p>
-                      </div>
-                      <span className="text-sm font-medium text-primary">
-                        {item.totalStudents} student{item.totalStudents === 1 ? '' : 's'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Sections</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {item.sections.map((section) => (
-                            <span key={`${item.classId}-${section.name}`} className="status-badge info">
-                              {section.name}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Zones</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {item.zones.map((zoneValue) => (
-                            <span key={`${item.classId}-${zoneValue}`} className="status-badge warning capitalize">
-                              {String(zoneValue).toLowerCase()}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => openStudentsView(item)}
-                        className="btn btn-secondary !px-3 !py-1.5"
-                      >
-                        <FiEye className="w-4 h-4" />
-                        <span className="text-sm font-medium">View All</span>
-                      </button>
-                      <button
-                        onClick={() => openAddStudentModal(item)}
-                        className="btn btn-primary !px-3 !py-1.5"
-                      >
-                        <FiPlus className="w-4 h-4" />
-                        <span className="text-sm font-medium">Add Student</span>
-                      </button>
-                      <button
-                        onClick={() => openBulkModal(item)}
-                        className="btn btn-primary !px-3 !py-1.5"
-                      >
-                        <FiUpload className="w-4 h-4" />
-                        <span className="text-sm font-medium">Bulk Add</span>
-                      </button>
-                    </div>
-
-                    {item.sections.filter((section) => section.id).length > 0 && (
-                      <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-blue-700">Section Wise View</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {item.sections
-                            .filter((section) => section.id)
-                            .map((section) => (
-                              <button
-                                key={`${item.classId}-view-${section.id}`}
-                                type="button"
-                                onClick={() => openStudentsView(item, section)}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
-                              >
-                                <FiEye className="h-3.5 w-3.5" />
-                                {section.name}
-                              </button>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {showAddStudentModal && selectedClassForAdd && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="hide-scrollbar overflow-x-hidden bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-800">Add Student</h2>
-                  <p className="text-sm text-gray-500 mt-1">Class: {selectedClassForAdd.className}</p>
-                  <p className="text-xs text-gray-500 mt-1">Only sections and zones assigned to you are selectable.</p>
-                </div>
-                <button
-                  onClick={closeAddStudentModal}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleAddStudent} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
-                  <div className="relative">
-                    <FiUser className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      required
-                      value={studentFormData.full_name}
-                      onChange={(event) => setStudentFormData((prev) => ({ ...prev, full_name: event.target.value }))}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                      placeholder="Student Name"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                  <div className="relative">
-                    <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="email"
-                      required
-                      value={studentFormData.email}
-                      onChange={(event) => setStudentFormData((prev) => ({ ...prev, email: event.target.value }))}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                      placeholder="student@example.com"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Roll Number *</label>
-                  <input
-                    type="text"
-                    required
-                    value={studentFormData.roll_number}
-                    onChange={(event) => setStudentFormData((prev) => ({ ...prev, roll_number: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                    placeholder="STU001"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input
-                    type="tel"
-                    value={studentFormData.phone}
-                    onChange={(event) => setStudentFormData((prev) => ({ ...prev, phone: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                    placeholder="1234567890"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Section {selectedClassForAdd.allowAllSections ? '(optional)' : '*'}
-                  </label>
-                  <select
-                    required={!selectedClassForAdd.allowAllSections}
-                    value={studentFormData.section_id}
-                    onChange={(event) => setStudentFormData((prev) => ({ ...prev, section_id: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                  >
-                    <option value="">{selectedClassForAdd.allowAllSections ? 'All Sections' : 'Select Section'}</option>
-                    {selectedClassForAdd.sections
-                      .filter((section) => section.id)
-                      .map((section) => (
-                        <option key={section.id} value={section.id}>{section.name}</option>
-                      ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Zone {selectedClassForAdd.allowAllZones ? '(optional)' : '*'}
-                  </label>
-                  <select
-                    required={!selectedClassForAdd.allowAllZones}
-                    value={studentFormData.zone}
-                    onChange={(event) => setStudentFormData((prev) => ({ ...prev, zone: event.target.value }))}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary"
-                  >
-                    <option value="">{selectedClassForAdd.allowAllZones ? 'All Zones' : 'Select Zone'}</option>
-                    {(selectedClassForAdd.allowAllZones
-                      ? ['blue', 'red', 'green']
-                      : selectedClassForAdd.zones.filter((zoneValue) => zoneValue && zoneValue !== 'All Zones'))
-                      .map((zoneValue) => (
-                        <option key={zoneValue} value={zoneValue}>
-                          {zoneValue.charAt(0).toUpperCase() + zoneValue.slice(1)}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={closeAddStudentModal}
-                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={formLoading}
-                    className="flex-1 px-4 py-3 bg-primary hover:bg-primary-dark text-white rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    {formLoading ? 'Adding...' : 'Add Student'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {showBulkModal && selectedClassForBulk && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="hide-scrollbar overflow-x-hidden bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-800">Bulk Add Students</h2>
-                  <p className="text-sm text-gray-500 mt-1">Class: {selectedClassForBulk.className}</p>
-                </div>
-                <button onClick={closeBulkModal} className="p-2 hover:bg-gray-100 rounded-lg">
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700">
-                  <p className="font-medium text-gray-800 mb-2">CSV columns</p>
-                  <p>Required: <span className="font-medium">full_name, email, roll_number</span></p>
-                  <p>Optional: <span className="font-medium">phone, section_id or section_name, zone</span></p>
-                  <p className="mt-1">Duplicates (CSV or existing database) are automatically skipped.</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload CSV File</label>
-                  <input
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] || null;
-                      setBulkFile(file);
-                      setBulkPreview(null);
-                    }}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={handleBulkPreview}
-                    disabled={previewLoading}
-                    className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    {previewLoading ? 'Generating Preview...' : 'Preview'}
-                  </button>
-                  {bulkPreview && (
-                    <button
-                      type="button"
-                      onClick={handleBulkImport}
-                      disabled={importLoading || !bulkPreview.candidates?.length}
-                      className="px-4 py-2 bg-primary-dark hover:bg-primary text-white rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {importLoading ? 'Importing...' : `Import ${bulkPreview.summary?.ready || 0} Student(s)`}
-                    </button>
-                  )}
-                </div>
-
-                {bulkPreview && (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-3 gap-3 text-sm">
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                        Total: <span className="font-semibold">{bulkPreview.summary?.total || 0}</span>
-                      </div>
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-blue-700">
-                        Ready: <span className="font-semibold">{bulkPreview.summary?.ready || 0}</span>
-                      </div>
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-700">
-                        Skipped: <span className="font-semibold">{bulkPreview.summary?.skipped || 0}</span>
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto border border-gray-200 rounded-xl">
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Row</th>
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Name</th>
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Roll</th>
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Reason</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {(bulkPreview.rows || []).map((row) => (
-                            <tr key={`${row.rowNumber}-${row.email}-${row.roll_number}`}>
-                              <td className="px-3 py-2 text-gray-600">{row.rowNumber}</td>
-                              <td className="px-3 py-2 text-gray-800">{row.full_name || '-'}</td>
-                              <td className="px-3 py-2 text-gray-600">{row.email || '-'}</td>
-                              <td className="px-3 py-2 text-gray-600">{row.roll_number || '-'}</td>
-                              <td className="px-3 py-2">
-                                <span className={`px-2 py-1 text-xs rounded-full ${row.status === 'ready' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                                  {row.status}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-gray-600">{(row.reasons || []).join(', ') || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </Layout>
+  );
+
+  return (
+    <Layout>
+      <div className="app-page">
+
+        {/* ── Page Header ── */}
+        <div className="page-header">
+          <h1>My Classes</h1>
+          <p>Your assigned sections and students — read-only view.</p>
+        </div>
+
+        {/* ── Stats Row ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Classes',  value: totalClasses,  icon: FiBook,   color: '#2563EB', bg: '#EFF6FF' },
+            { label: 'Sections', value: totalSections, icon: FiLayers, color: '#9333EA', bg: '#FDF4FF' },
+            { label: 'Students', value: totalStudents, icon: FiUsers,  color: '#16A34A', bg: '#F0FDF4' },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <p style={{ fontSize: 12, color: '#6B7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{label}</p>
+                <p style={{ fontSize: 28, fontWeight: 700, color: '#111827', lineHeight: 1 }}>{value}</p>
+              </div>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon style={{ width: 20, height: 20, color }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Error ── */}
+        {error && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '14px 16px', color: '#B91C1C' }}>
+            <FiAlertCircle style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: 14 }}>{error}</span>
+          </div>
+        )}
+
+        {/* ── Card Panel ── */}
+        {!error && (
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, overflow: 'hidden' }}>
+
+            {/* Panel header with search */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <p style={{ fontWeight: 600, fontSize: 15, color: '#111827' }}>
+                Section Assignments
+                {filtered.length > 0 && (
+                  <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: '#6B7280', background: '#F3F4F6', borderRadius: 99, padding: '1px 8px' }}>
+                    {filtered.length}
+                  </span>
+                )}
+              </p>
+              <div style={{ position: 'relative', width: 240 }}>
+                <FiSearch style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', width: 15, height: 15, pointerEvents: 'none' }} />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search class or section…"
+                  style={{ width: '100%', paddingLeft: 32, paddingRight: 12, paddingTop: 8, paddingBottom: 8, border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 13, color: '#374151', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+
+            {/* Empty state */}
+            {filtered.length === 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 24px', gap: 12, textAlign: 'center' }}>
+                <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FiInbox style={{ width: 28, height: 28, color: '#9CA3AF' }} />
+                </div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#374151', margin: 0 }}>
+                  {cards.length === 0 ? 'No classes assigned yet' : 'No results match your search'}
+                </p>
+                <p style={{ fontSize: 13, color: '#9CA3AF', margin: 0, maxWidth: 280 }}>
+                  {cards.length === 0
+                    ? 'Ask your admin to assign you to a class section.'
+                    : 'Try a different class or section name.'}
+                </p>
+              </div>
+            )}
+
+            {/* Cards grid */}
+            {filtered.length > 0 && (
+              <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+                {filtered.map((card, idx) => (
+                  <SectionCard key={card.key} card={card} idx={idx} onManage={() => handleManage(card, idx)} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+    </Layout>
+  );
+};
+
+/* ─── Section Card ─────────────────────────────────────────────────────────── */
+
+const SectionCard = ({ card, idx, onManage }) => {
+  const [hovered, setHovered] = useState(false);
+
+  const allZones  = card.zones.length === 0;
+  const zonesList = allZones ? ['blue', 'red', 'green'] : card.zones;
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: '#fff',
+        border: `1.5px solid ${hovered ? '#BFDBFE' : '#E5E7EB'}`,
+        borderRadius: 14,
+        padding: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+        transition: 'border-color 0.18s, box-shadow 0.18s',
+        boxShadow: hovered ? '0 4px 16px rgba(37,99,235,0.08)' : '0 1px 3px rgba(0,0,0,0.04)',
+        cursor: 'default',
+      }}
+    >
+      {/* Card header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <ClassInitials name={card.className} index={idx} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#111827', margin: 0, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {card.className}
+          </p>
+          <p style={{ fontSize: 13, color: '#6B7280', margin: '3px 0 0', fontWeight: 500 }}>
+            {card.sectionName}
+          </p>
+        </div>
+        <span style={{ flexShrink: 0, background: '#F0F9FF', border: '1px solid #BAE6FD', color: '#0369A1', borderRadius: 99, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>
+          {card.studentCount} {card.studentCount === 1 ? 'student' : 'students'}
+        </span>
+      </div>
+
+      {/* Divider */}
+      <div style={{ borderTop: '1px solid #F1F5F9' }} />
+
+      {/* Zones */}
+      <div>
+        <p style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>
+          {allZones ? 'All Zones' : 'Assigned Zones'}
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {allZones ? (
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 99, padding: '3px 10px' }}>
+              All Zones
+            </span>
+          ) : (
+            zonesList.map(z => <ZoneBadge key={z} zone={z} />)
+          )}
+        </div>
+      </div>
+
+      {/* Manage button */}
+      <button
+        onClick={onManage}
+        style={{
+          marginTop: 2,
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 7,
+          padding: '10px 16px',
+          background: hovered ? '#2563EB' : '#EFF6FF',
+          color: hovered ? '#fff' : '#2563EB',
+          border: `1.5px solid ${hovered ? '#2563EB' : '#BFDBFE'}`,
+          borderRadius: 10,
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'background 0.18s, color 0.18s, border-color 0.18s',
+        }}
+      >
+        View Students
+        <FiArrowRight style={{ width: 14, height: 14 }} />
+      </button>
+    </div>
   );
 };
 

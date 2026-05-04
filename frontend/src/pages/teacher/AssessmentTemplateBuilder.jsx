@@ -544,12 +544,12 @@ const AssessmentTemplateBuilder = () => {
             <a
               href="/assessment-questions-template.json"
               download
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              className="inline-flex items-center gap-1 rounded-sm border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50"
             >
               <FiDownload className="h-3.5 w-3.5 text-blue-600" />
               JSON Template
             </a>
-            <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-sm border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50">
               <FiUpload className="h-3.5 w-3.5 text-emerald-600" />
               {importingJson ? 'Importing...' : 'Import JSON'}
               <input
@@ -581,7 +581,7 @@ const AssessmentTemplateBuilder = () => {
                 />
               </div>
               <div className="lg:col-span-3 lg:flex lg:items-end">
-                <div className="inline-flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                <div className="inline-flex w-full items-center gap-2 rounded-sm border border-slate-200 bg-white px-3 py-2.5 text-sm">
                   {builderSaving ? (
                     <FiLoader className="h-4 w-4 animate-spin text-blue-600" />
                   ) : isLocalDraft ? (
@@ -589,8 +589,8 @@ const AssessmentTemplateBuilder = () => {
                   ) : (
                     <FiCheckCircle className="h-4 w-4 text-emerald-600" />
                   )}
-                  <span className="font-medium text-slate-700">Auto Save:</span>
-                  <span className="text-slate-600">
+                  <span className="font-bold text-slate-700">Auto Save:</span>
+                  <span className="font-medium text-slate-600">
                     {builderSaving
                       ? 'Saving...'
                       : isLocalDraft
@@ -602,31 +602,31 @@ const AssessmentTemplateBuilder = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-blue-700">Total Questions</p>
-                <p className="mt-1 text-2xl font-semibold text-blue-900">{mcqList.length}</p>
+              <div className="rounded-sm border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Questions</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">{mcqList.length}</p>
               </div>
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-emerald-700">MCQ Questions</p>
-                <p className="mt-1 text-2xl font-semibold text-emerald-900">{mcqCount}</p>
+              <div className="rounded-sm border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">MCQ Questions</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">{mcqCount}</p>
               </div>
-              <div className="rounded-xl border border-violet-100 bg-violet-50/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-violet-700">Blank Questions</p>
-                <p className="mt-1 text-2xl font-semibold text-violet-900">{blankCount}</p>
+              <div className="rounded-sm border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Blank Questions</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">{blankCount}</p>
               </div>
-              <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-amber-700">Total Marks</p>
-                <p className="mt-1 text-2xl font-semibold text-amber-900">{totalQuestionMarks}</p>
+              <div className="rounded-sm border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Marks</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">{totalQuestionMarks}</p>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-blue-50/40 p-4 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-800">
+            <div className="rounded-sm border border-slate-200 bg-white p-5 space-y-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <h3 className="text-base font-bold text-slate-900">
                   {editingIndex !== null
                     ? `Edit Question ${editingIndex + 1}`
                     : (insertAtIndex !== null ? `Insert New Question at Position ${insertAtIndex + 1}` : 'Add Question')}
-                </p>
+                </h3>
                 {(editingIndex !== null || insertAtIndex !== null) && (
                   <Button variant="secondary" className="!h-8 !px-3" onClick={resetQuestionForm}>
                     <FiX className="h-4 w-4" />
@@ -636,21 +636,20 @@ const AssessmentTemplateBuilder = () => {
               </div>
 
               {mcqList.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick Switch</p>
+                <div className="space-y-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Quick Switch</p>
                   <div className="flex flex-wrap gap-2">
                     {mcqList.map((_, index) => (
                       <button
                         key={`quick-switch-${index}`}
                         type="button"
                         onClick={() => openQuestionForEdit(index)}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                          editingIndex === index
-                            ? 'border-blue-300 bg-blue-50 text-primary'
+                        className={`rounded-sm border px-3 py-1.5 text-xs font-bold transition-colors ${editingIndex === index
+                            ? 'border-slate-900 bg-slate-900 text-white'
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
+                          }`}
                       >
-                        Q{index + 1}
+                        {index + 1}
                       </button>
                     ))}
                   </div>
@@ -678,33 +677,31 @@ const AssessmentTemplateBuilder = () => {
               />
 
               {showsBlankHint && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  For fill-in-the-blank, use <span className="font-semibold">____</span> where the blank should appear.
+                <div className="rounded-sm border-l-4 border-l-amber-400 border-y border-r border-slate-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-900">
+                  For fill-in-the-blank, use <span className="font-bold">____</span> where the blank should appear.
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="form-label text-slate-700">Step 1: Choose Question Type</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-3">
+                <label className="form-label text-slate-900 font-semibold">Question Type</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setNewMcq((prev) => ({ ...prev, type: 'mcq', answerMode: prev.answerMode || 'single', correctOptions: prev.correctOptions?.length ? prev.correctOptions : [0], correctOption: prev.correctOptions?.[0] ?? 0 }))}
-                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                      newMcq.type === 'mcq'
-                        ? 'border-blue-300 bg-blue-100 text-blue-800 shadow-sm'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
+                    className={`rounded-sm border px-4 py-2.5 text-sm font-semibold transition-colors ${newMcq.type === 'mcq'
+                        ? 'border-blue-500 bg-blue-50 text-blue-900'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
                   >
                     Multiple Choice (MCQ)
                   </button>
                   <button
                     type="button"
                     onClick={() => setNewMcq((prev) => ({ ...prev, type: 'blank' }))}
-                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                      newMcq.type === 'blank'
-                        ? 'border-violet-300 bg-violet-100 text-violet-800 shadow-sm'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
+                    className={`rounded-sm border px-4 py-2.5 text-sm font-semibold transition-colors ${newMcq.type === 'blank'
+                        ? 'border-slate-700 bg-slate-100 text-slate-900'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
                   >
                     Fill in the Blank
                   </button>
@@ -713,28 +710,26 @@ const AssessmentTemplateBuilder = () => {
 
               {newMcq.type === 'mcq' ? (
                 <>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Step 2: Add options and mark correct answer(s)</p>
-                    <div className="flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h4 className="text-sm font-bold text-slate-900">Options & Correct Answer</h4>
+                    <div className="flex rounded-sm border border-slate-200 bg-white overflow-hidden">
                       <button
                         type="button"
                         onClick={() => updateAnswerMode('single')}
-                        className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
-                          newMcq.answerMode === 'single'
-                            ? 'bg-blue-100 text-blue-800'
+                        className={`px-4 py-1.5 text-xs font-bold transition-colors border-r border-slate-200 ${newMcq.answerMode === 'single'
+                            ? 'bg-slate-900 text-white'
                             : 'text-slate-600 hover:bg-slate-50'
-                        }`}
+                          }`}
                       >
                         Single Correct
                       </button>
                       <button
                         type="button"
                         onClick={() => updateAnswerMode('multiple')}
-                        className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
-                          newMcq.answerMode === 'multiple'
-                            ? 'bg-emerald-100 text-emerald-800'
+                        className={`px-4 py-1.5 text-xs font-bold transition-colors ${newMcq.answerMode === 'multiple'
+                            ? 'bg-slate-900 text-white'
                             : 'text-slate-600 hover:bg-slate-50'
-                        }`}
+                          }`}
                       >
                         Multiple Correct
                       </button>
@@ -743,15 +738,15 @@ const AssessmentTemplateBuilder = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {[0, 1, 2, 3].map((optionIndex) => (
-                      <div key={optionIndex} className={`rounded-xl border p-3 ${newMcq.correctOptions.includes(optionIndex) ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-white'}`}>
+                      <div key={optionIndex} className={`rounded-sm border p-4 ${newMcq.correctOptions.includes(optionIndex) ? 'border-l-4 border-l-emerald-500 border-slate-200 bg-emerald-50/40' : 'border-slate-200 bg-white'}`}>
                         <div className="mb-2 flex items-center justify-between">
-                          <p className="text-sm font-medium text-slate-700">Option {optionIndex + 1}</p>
-                          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600">
+                          <p className="text-sm font-bold text-slate-800">Option {String.fromCharCode(65 + optionIndex)}</p>
+                          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-700">
                             <input
                               type="checkbox"
                               checked={newMcq.correctOptions.includes(optionIndex)}
                               onChange={() => toggleCorrectOption(optionIndex)}
-                              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                              className="h-4 w-4 rounded-sm border-slate-400 text-emerald-600 focus:ring-emerald-500"
                             />
                             Correct
                           </label>
@@ -763,7 +758,7 @@ const AssessmentTemplateBuilder = () => {
                             nextOptions[optionIndex] = event.target.value;
                             setNewMcq((prev) => ({ ...prev, options: nextOptions }));
                           }}
-                          placeholder={`Option ${optionIndex + 1}`}
+                          placeholder={`Option ${String.fromCharCode(65 + optionIndex)}`}
                         />
                       </div>
                     ))}
@@ -771,9 +766,9 @@ const AssessmentTemplateBuilder = () => {
                 </>
               ) : (
                 <>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Step 2: Enter the blank answer</p>
+                  <h4 className="text-sm font-bold text-slate-900">Blank Answer</h4>
                   <InputField
-                    label="Blank Answer"
+                    label="Correct Answer"
                     value={newMcq.blankAnswer}
                     onChange={(event) => setNewMcq((prev) => ({ ...prev, blankAnswer: event.target.value }))}
                     placeholder="Enter the correct word/phrase for blank"
@@ -781,26 +776,31 @@ const AssessmentTemplateBuilder = () => {
                 </>
               )}
 
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">Live Preview</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">
+              <div className="rounded-sm border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Live Preview</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
                   {newMcq.question || 'Question preview will appear here as you type.'}
                 </p>
-                <p className="mt-1 text-xs text-slate-600">Marks: {normalizeMarksValue(newMcq.marks, 1)}</p>
+                <p className="mt-1 text-xs font-medium text-slate-600">Marks: {normalizeMarksValue(newMcq.marks, 1)}</p>
                 {newMcq.type === 'mcq' ? (
-                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600">
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-700">
                     {[0, 1, 2, 3].map((optionIndex) => (
                       <p
                         key={`preview-option-${optionIndex}`}
-                        className={newMcq.correctOptions.includes(optionIndex) ? 'font-semibold text-emerald-700' : ''}
+                        className={`flex items-center gap-2 ${newMcq.correctOptions.includes(optionIndex) ? 'font-bold text-emerald-700' : ''}`}
                       >
-                        {String.fromCharCode(65 + optionIndex)}) {newMcq.options[optionIndex] || `Option ${optionIndex + 1}`}
-                        {newMcq.correctOptions.includes(optionIndex) ? ' ✓' : ''}
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-sm border border-slate-300 bg-white text-[10px] font-bold text-slate-500">
+                          {String.fromCharCode(65 + optionIndex)}
+                        </span>
+                        {newMcq.options[optionIndex] || `Option ${String.fromCharCode(65 + optionIndex)}`}
+                        {newMcq.correctOptions.includes(optionIndex) && (
+                          <span className="ml-auto text-emerald-600 font-bold">CORRECT</span>
+                        )}
                       </p>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-slate-600">Expected answer: {newMcq.blankAnswer || '—'}</p>
+                  <p className="mt-2 text-xs font-medium text-slate-600">Expected answer: {newMcq.blankAnswer || '—'}</p>
                 )}
               </div>
 
@@ -826,8 +826,8 @@ const AssessmentTemplateBuilder = () => {
             </div>
 
             <div>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium text-slate-800">Question Set ({mcqList.length})</p>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                <h3 className="text-base font-bold text-slate-900">Question Set ({mcqList.length})</h3>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="status-badge info">MCQ: {mcqCount}</span>
                   <span className="status-badge warning">Blank: {blankCount}</span>
@@ -840,58 +840,58 @@ const AssessmentTemplateBuilder = () => {
                   <table>
                     <thead>
                       <tr>
-                        <th>#</th>
-                        <th>Type</th>
-                        <th>Question</th>
-                        <th>Marks</th>
-                        <th>Correct</th>
-                        <th className="text-right">Actions</th>
+                        <th className="font-bold text-slate-700">#</th>
+                        <th className="font-bold text-slate-700">Type</th>
+                        <th className="font-bold text-slate-700">Question</th>
+                        <th className="font-bold text-slate-700">Marks</th>
+                        <th className="font-bold text-slate-700">Correct</th>
+                        <th className="text-right font-bold text-slate-700">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {mcqList.map((mcq, index) => (
-                        <tr key={`mcq-${index}`} className="group">
-                          <td>{index + 1}</td>
+                        <tr key={`mcq-${index}`} className="group border-b border-slate-100">
+                          <td className="font-bold text-slate-900">{index + 1}</td>
                           <td>
                             <span className={`status-badge ${mcq.type === 'blank' ? 'warning' : 'info'}`}>
                               {getQuestionTypeLabel(mcq.type)}
                             </span>
                           </td>
                           <td>
-                            <p className="font-medium text-slate-800">{mcq.question}</p>
+                            <p className="font-semibold text-slate-900">{mcq.question}</p>
                             {mcq.type === 'blank' ? (
-                              <p className="text-xs text-slate-500 mt-1">Blank Answer: {mcq.blankAnswer || '—'}</p>
+                              <p className="text-xs font-medium text-slate-600 mt-1">Answer: {mcq.blankAnswer || '—'}</p>
                             ) : (
-                              <p className="text-xs text-slate-500 mt-1">
-                                A) {mcq.options[0]} • B) {mcq.options[1]} • C) {mcq.options[2]} • D) {mcq.options[3]}
+                              <p className="text-xs font-medium text-slate-600 mt-1">
+                                {String.fromCharCode(65)}) {mcq.options[0]} • {String.fromCharCode(66)}) {mcq.options[1]} • {String.fromCharCode(67)}) {mcq.options[2]} • {String.fromCharCode(68)}) {mcq.options[3]}
                               </p>
                             )}
                           </td>
-                          <td>
+                          <td className="font-semibold text-slate-900">
                             {normalizeMarksValue(mcq.marks, 1)}
                           </td>
-                          <td>
+                          <td className="font-medium text-slate-700">
                             {mcq.type === 'blank'
                               ? 'Blank Answer'
                               : ((mcq.correctOptions && mcq.correctOptions.length > 0)
-                                ? mcq.correctOptions.map((optionIndex) => `Option ${optionIndex + 1}`).join(', ')
-                                : `Option ${(mcq.correctOption ?? 0) + 1}`)}
+                                ? mcq.correctOptions.map((optionIndex) => String.fromCharCode(65 + optionIndex)).join(', ')
+                                : String.fromCharCode(65 + (mcq.correctOption ?? 0)))}
                           </td>
                           <td>
                             <div className="flex justify-end gap-2">
                               <Button
                                 variant="secondary"
-                                className="!h-9 !px-3 !opacity-0 !pointer-events-none transition-opacity duration-150 group-hover:!opacity-100 group-hover:!pointer-events-auto group-focus-within:!opacity-100 group-focus-within:!pointer-events-auto"
+                                className="!h-8 !px-2 !text-xs !opacity-0 !pointer-events-none transition-opacity duration-150 group-hover:!opacity-100 group-hover:!pointer-events-auto group-focus-within:!opacity-100 group-focus-within:!pointer-events-auto"
                                 onClick={() => beginInsertAt(index + 1)}
                               >
-                                <FiPlus className="h-4 w-4" />
-                                Insert Below
+                                <FiPlus className="h-3.5 w-3.5" />
+                                Insert
                               </Button>
-                              <Button variant="secondary" className="!h-9 !px-3" onClick={() => openQuestionForEdit(index)}>
+                              <Button variant="secondary" className="!h-8 !px-2 !text-xs" onClick={() => openQuestionForEdit(index)}>
                                 Edit
                               </Button>
-                              <Button variant="danger" className="!h-9 !px-3" onClick={() => deleteQuestion(index)}>
-                                <FiTrash2 className="h-4 w-4" />
+                              <Button variant="danger" className="!h-8 !px-2 !text-xs" onClick={() => deleteQuestion(index)}>
+                                <FiTrash2 className="h-3.5 w-3.5" />
                                 Remove
                               </Button>
                             </div>

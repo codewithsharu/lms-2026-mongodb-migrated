@@ -46,6 +46,7 @@ const ClassManage = () => {
 
   const [editingSection, setEditingSection] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editingAssignmentId, setEditingAssignmentId] = useState(null);
 
   const [classForm, setClassForm] = useState({ name: '', description: '', academic_year: '' });
   const [sectionForm, setSectionForm] = useState({ name: '' });
@@ -187,6 +188,18 @@ const ClassManage = () => {
 
   const openAssignTeacher = async () => {
     setAssignForm({ teacher_id: '', section_id: '', zone: '' });
+    setEditingAssignmentId(null);
+    await fetchTeachers();
+    setShowAssignModal(true);
+  };
+
+  const openEditAssignment = async (assignment) => {
+    setAssignForm({
+      teacher_id: assignment.teacher?.id || assignment.teacher?._id || '',
+      section_id: assignment.section?.id || assignment.section?._id || '',
+      zone: assignment.zone || ''
+    });
+    setEditingAssignmentId(assignment.id || assignment._id);
     await fetchTeachers();
     setShowAssignModal(true);
   };
@@ -201,9 +214,13 @@ const ClassManage = () => {
     setFormLoading(true);
 
     try {
+      if (editingAssignmentId) {
+        await classAPI.removeAssignment(editingAssignmentId);
+      }
       await classAPI.assignTeacher(classId, assignForm);
-      toast.success('Teacher assigned successfully');
+      toast.success(editingAssignmentId ? 'Teacher assignment updated' : 'Teacher assigned successfully');
       setShowAssignModal(false);
+      setEditingAssignmentId(null);
       fetchClassDetails();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Assignment failed');
@@ -324,41 +341,6 @@ const ClassManage = () => {
           <div className="space-y-4">
             <Card className="border-slate-200">
               <Card.Body className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                  {classInfo?.academic_year && (
-                    <span className="inline-flex items-center gap-1">
-                      <FiCalendar className="h-3.5 w-3.5" />
-                      {classInfo.academic_year}
-                    </span>
-                  )}
-                  <span className={classInfo?.is_active ? 'status-badge success' : 'status-badge warning'}>
-                    {classInfo?.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="surface-card-muted p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Sections</p>
-                    <p className="mt-1 text-lg font-medium text-slate-800">{classDetails.sections.length}</p>
-                  </div>
-                  <div className="surface-card-muted p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Students</p>
-                    <p className="mt-1 text-lg font-medium text-slate-800">{totalStudents}</p>
-                  </div>
-                  <div className="surface-card-muted p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Teacher Assignments</p>
-                    <p className="mt-1 text-lg font-medium text-slate-800">{classDetails.teacher_assignments.length}</p>
-                  </div>
-                  <div className="surface-card-muted p-3">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Unassigned Sections</p>
-                    <p className="mt-1 text-lg font-medium text-slate-800">{unassignedSections}</p>
-                  </div>
-                </div>
-              </Card.Body>
-            </Card>
-
-            <Card className="border-slate-200">
-              <Card.Body className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
                   <button
                     type="button"
@@ -469,13 +451,22 @@ const ClassManage = () => {
                               </div>
                             </div>
                           </div>
-                          <Button
-                            variant="secondary"
-                            className="!h-8 !w-8 !p-0 !border-red-200 !text-red-600 hover:!bg-red-50"
-                            onClick={() => handleRemoveAssignment(assignment.id)}
-                          >
-                            <FiTrash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="secondary"
+                              className="!h-8 !w-8 !p-0"
+                              onClick={() => openEditAssignment(assignment)}
+                            >
+                              <FiEdit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              className="!h-8 !w-8 !p-0 !border-red-200 !text-red-600 hover:!bg-red-50"
+                              onClick={() => handleRemoveAssignment(assignment.id)}
+                            >
+                              <FiTrash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
                       ))
                     )}
@@ -583,7 +574,7 @@ const ClassManage = () => {
       <Modal
         open={showAssignModal}
         onClose={() => setShowAssignModal(false)}
-        title="Assign Teacher"
+        title={editingAssignmentId ? 'Edit Assignment' : 'Assign Teacher'}
         subtitle="Assign a teacher to this class, section, and zone."
         maxWidth="max-w-lg"
         footer={
@@ -592,7 +583,7 @@ const ClassManage = () => {
               Cancel
             </Button>
             <Button type="submit" form="assign-form" disabled={formLoading} className="w-full sm:w-36" variant="success">
-              {formLoading ? 'Assigning...' : 'Assign'}
+              {formLoading ? 'Saving...' : editingAssignmentId ? 'Update' : 'Assign'}
             </Button>
           </div>
         }

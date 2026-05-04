@@ -38,7 +38,6 @@ import AdminSettings from './pages/admin/Settings';
 import HealthCheck from './pages/admin/HealthCheck';
 import HealthCheckTable from './pages/admin/HealthCheckTable';
 import TeacherDashboard from './pages/teacher/Dashboard';
-import TeacherStudents from './pages/teacher/Students';
 import TeacherClasses from './pages/teacher/Classes';
 import TeacherClassStudents from './pages/teacher/ClassStudents';
 import TeacherAssessmentTemplates from './pages/teacher/AssessmentTemplates';
@@ -198,7 +197,7 @@ function App() {
             path="/teacher/students" 
             element={
               <ProtectedRoute allowedRoles={['teacher']}>
-                <TeacherStudents />
+                <Navigate to="/teacher/classes" replace />
               </ProtectedRoute>
             } 
           />

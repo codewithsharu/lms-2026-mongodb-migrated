@@ -184,46 +184,6 @@ const ClassSectionStudents = () => {
         )}
 
         <div className="grid grid-cols-1 gap-6 mb-6">
-          {/* Zone Statistics */}
-          <Card>
-            <Card.Header>
-              <h3 className="text-sm font-medium text-gray-700">Zone Distribution</h3>
-            </Card.Header>
-            <Card.Body>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="rounded-lg border border-gray-200 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Blue</span>
-                    <span className="h-2 w-2 rounded-full bg-blue-500" />
-                  </div>
-                  <div className="mt-2 text-2xl font-semibold text-gray-900">{zoneStats.blue}</div>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Red</span>
-                    <span className="h-2 w-2 rounded-full bg-red-500" />
-                  </div>
-                  <div className="mt-2 text-2xl font-semibold text-gray-900">{zoneStats.red}</div>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Green</span>
-                    <span className="h-2 w-2 rounded-full bg-green-500" />
-                  </div>
-                  <div className="mt-2 text-2xl font-semibold text-gray-900">{zoneStats.green}</div>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Unassigned</span>
-                    <span className="h-2 w-2 rounded-full bg-gray-400" />
-                  </div>
-                  <div className="mt-2 text-2xl font-semibold text-gray-900">{zoneStats.unassigned}</div>
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
-
-          {/* Search and Filters */}
           <Card>
             <Card.Header>
               <h3 className="text-sm font-medium text-gray-700">Search & Filters</h3>

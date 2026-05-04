@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { FiEdit3, FiPlayCircle, FiPlus, FiSend, FiTrash2 } from 'react-icons/fi';
+import { FiEdit3, FiPlayCircle, FiPlus, FiSend, FiTrash2, FiChevronDown, FiChevronRight, FiMaximize2, FiMinimize2, FiDownload, FiUpload } from 'react-icons/fi';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import InputField from '../../components/ui/InputField';
@@ -77,7 +77,7 @@ const createEmptyQuestion = () => ({
   difficultyLevel: 'easy',
   supportedLanguages: ['python', 'java', 'c', 'cpp'],
   ignoreCase: true,
-  validations: []
+  validations: [createEmptyTestCase(1)]
 });
 
 const createEmptyChallengeForm = () => ({
@@ -96,6 +96,17 @@ const buildFormFromPayload = (payload) => {
   const questions = problems.length > 0
     ? problems.map((problem) => {
       const codeOptions = problem?.properties?.options?.code || {};
+      const testCases = Array.isArray(problem?.properties?.testCases)
+        ? problem.properties.testCases
+            .map((testCase, index) => ({
+              id: index + 1,
+              label: `case-${index + 1}`,
+              input: String(testCase?.input ?? ''),
+              output: String(testCase?.output ?? '')
+            }))
+            .filter((entry) => entry.input || entry.output)
+        : [];
+      
       const validations = Array.isArray(codeOptions.validations)
         ? codeOptions.validations
             .map((validation, index) => ({
@@ -117,7 +128,7 @@ const buildFormFromPayload = (payload) => {
           ? codeOptions.supportedLanguages.map((value) => String(value))
           : ['python', 'java', 'c', 'cpp'],
         ignoreCase: codeOptions.ignoreCase !== false,
-        validations: validations
+        validations: testCases.length > 0 ? testCases : validations
       };
     })
     : [createEmptyQuestion()];
@@ -223,6 +234,10 @@ const buildPayloadFromForm = (formState, basePayload = null) => {
           problemType: 'code',
           score: Number(question.score || 1),
           difficultyLevel: String(question.difficultyLevel || 'easy'),
+          testCases: validations.map((validation) => ({
+            input: validation.input,
+            output: validation.output
+          })),
           options: {
             ...(baseProblem?.properties?.options && typeof baseProblem.properties.options === 'object'
               ? baseProblem.properties.options
@@ -317,6 +332,9 @@ const ChallengeCreator = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  const [expandedQuestion, setExpandedQuestion] = useState(0);
+  const [jsonExpanded, setJsonExpanded] = useState(false);
+  const [importMode, setImportMode] = useState(null);
 
   const payload = useMemo(
     () => buildPayloadFromForm(formState, editableSourcePayload),
@@ -450,6 +468,45 @@ const ChallengeCreator = () => {
     }));
   };
 
+  const toggleQuestionExpanded = (questionIndex) => {
+    setExpandedQuestion((prev) => (prev === questionIndex ? -1 : questionIndex));
+  };
+
+  const exportJSON = () => {
+    const blob = new Blob([jsonInput], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `challenge-${formState.title || 'export'}-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('Challenge exported successfully');
+  };
+
+  const importFromText = (text) => {
+    try {
+      handleJsonInputChange(text);
+      setImportMode(null);
+      toast.success('Challenge imported successfully');
+    } catch (error) {
+      toast.error('Invalid JSON format');
+    }
+  };
+
+  const importFromFile = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        importFromText(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+    event.target.value = '';
+  };
+
   const toggleQuestionLanguage = (questionIndex, languageId) => {
     setFormState((prev) => ({
       ...prev,
@@ -480,7 +537,12 @@ const ChallengeCreator = () => {
 
   const removeQuestion = (questionIndex) => {
     setFormState((prev) => {
-      if (prev.questions.length === 1) return prev;
+      if (prev.questions.length === 1) {
+        return {
+          ...prev,
+          questions: [createEmptyQuestion()]
+        };
+      }
 
       return {
         ...prev,
@@ -696,69 +758,202 @@ const ChallengeCreator = () => {
 
         {error && <Alert>{error}</Alert>}
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_430px]">
-          <section className="compiler-card p-4 lg:p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="section-title">Questions and Test Cases</h2>
-              <Button type="button" variant="secondary" onClick={addQuestion}>
-                <FiPlus className="h-4 w-4" />
-                Add Question
-              </Button>
-            </div>
-
-            <div className="space-y-4">
-              {formState.questions.map((question, questionIndex) => (
-                <article key={`question-${questionIndex}`} className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-slate-800">Question {questionIndex + 1}</p>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50"
-                      onClick={() => removeQuestion(questionIndex)}
-                    >
-                      <FiTrash2 className="h-3.5 w-3.5" />
-                      Remove
-                    </button>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-                    <div className="lg:col-span-2">
-                      <InputField
-                        label="Question Title"
-                        value={question.title}
-                        onChange={(event) => updateQuestionField(questionIndex, 'title', event.target.value)}
-                      />
-                    </div>
-
-                    <InputField
-                      label="Score"
-                      type="number"
-                      min="1"
-                      value={question.score}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        updateQuestionField(
-                          questionIndex,
-                          'score',
-                          nextValue === '' ? '' : Number(nextValue)
-                        );
-                      }}
-                    />
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    <div>
-                      <label className="form-label" htmlFor={`difficulty-${questionIndex}`}>Difficulty</label>
-                      <select
-                        id={`difficulty-${questionIndex}`}
-                        className="form-select"
-                        value={question.difficultyLevel}
-                        onChange={(event) => updateQuestionField(questionIndex, 'difficultyLevel', event.target.value)}
+        <section className="compiler-card p-4 lg:p-5 mb-4">
+          <Card.Header>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="section-title">Editable JSON Payload</h3>
+                <p className="body-sm mt-1">Form and JSON are synced both ways automatically.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={exportJSON}
+                  className="!px-3 !py-1.5 !text-xs"
+                >
+                  <FiDownload className="h-3.5 w-3.5" />
+                  Export
+                </Button>
+                <div className="relative">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setImportMode(importMode ? null : 'menu')}
+                    className="!px-3 !py-1.5 !text-xs"
+                  >
+                    <FiUpload className="h-3.5 w-3.5" />
+                    Import
+                  </Button>
+                  {importMode && (
+                    <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-10 min-w-[150px]">
+                      <button
+                        type="button"
+                        onClick={() => setImportMode('text')}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 rounded"
                       >
-                        {DIFFICULTY_OPTIONS.map((difficulty) => (
-                          <option key={difficulty} value={difficulty}>{difficulty}</option>
-                        ))}
-                      </select>
+                        Import as Text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImportMode('file')}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 rounded"
+                      >
+                        Import from File
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setJsonExpanded(!jsonExpanded)}
+                  className="!px-3 !py-1.5 !text-xs"
+                >
+                  {jsonExpanded ? <FiMinimize2 className="h-3.5 w-3.5" /> : <FiMaximize2 className="h-3.5 w-3.5" />}
+                  {jsonExpanded ? 'Collapse' : 'Edit'}
+                </Button>
+              </div>
+            </div>
+            {importMode === 'text' && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <textarea
+                  className="form-input min-h-[100px] font-mono text-xs mb-2"
+                  placeholder="Paste JSON code here..."
+                  onChange={(e) => importFromText(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setImportMode(null)}
+                    className="!text-xs"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+            {importMode === 'file' && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={importFromFile}
+                  className="form-input mb-2"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setImportMode(null)}
+                    className="!text-xs"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card.Header>
+          {jsonExpanded && (
+            <Card.Body>
+              <textarea
+                className="form-input min-h-[300px] font-mono text-xs"
+                value={jsonInput}
+                onChange={(event) => handleJsonInputChange(event.target.value)}
+                onFocus={() => setIsEditingJson(true)}
+                onBlur={handleJsonEditorBlur}
+                spellCheck={false}
+                placeholder="Paste payload JSON here"
+              />
+
+              {jsonError && <Alert className="mt-2">{jsonError}</Alert>}
+            </Card.Body>
+          )}
+        </section>
+
+        <div className="mb-4">
+          <h2 className="section-title mb-3">Questions and Test Cases</h2>
+        </div>
+        
+        <section className="compiler-card p-4 lg:p-5">
+            <div className="space-y-3">
+              {formState.questions.map((question, questionIndex) => {
+                const isExpanded = expandedQuestion === questionIndex;
+                return (
+                  <article key={`question-${questionIndex}`} className="border border-slate-300 bg-white overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between gap-3 p-4 bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => toggleQuestionExpanded(questionIndex)}
+                        className="flex items-center gap-3 flex-grow text-left hover:bg-white/50 transition-all duration-200 p-3 rounded-lg"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full transition-colors ${isExpanded ? 'bg-blue-500' : 'bg-slate-400'}`}></div>
+                          {isExpanded ? <FiChevronDown className="h-5 w-5 text-blue-600" /> : <FiChevronRight className="h-5 w-5 text-slate-600" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-bold text-slate-900 text-base">Coding Question {questionIndex + 1}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            {question.title && (
+                              <span className="text-sm text-slate-600 truncate max-w-md">{question.title}</span>
+                            )}
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                              {question.validations?.length || 0} test cases
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50 shadow-sm transition-all duration-200"
+                        onClick={() => removeQuestion(questionIndex)}
+                      >
+                        <FiTrash2 className="h-4 w-4" />
+                        Remove
+                      </button>
+                    </div>
+                    
+                    {isExpanded && (
+                      <div className="p-3">
+                        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                          <div className="lg:col-span-2">
+                            <InputField
+                              label="Question Title"
+                              value={question.title}
+                              onChange={(event) => updateQuestionField(questionIndex, 'title', event.target.value)}
+                            />
+                          </div>
+
+                          <InputField
+                            label="Score"
+                            type="number"
+                            min="1"
+                            value={question.score}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              updateQuestionField(
+                                questionIndex,
+                                'score',
+                                nextValue === '' ? '' : Number(nextValue)
+                              );
+                            }}
+                          />
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                          <div>
+                            <label className="form-label" htmlFor={`difficulty-${questionIndex}`}>Difficulty</label>
+                            <select
+                              id={`difficulty-${questionIndex}`}
+                              className="form-select"
+                              value={question.difficultyLevel}
+                              onChange={(event) => updateQuestionField(questionIndex, 'difficultyLevel', event.target.value)}
+                            >
+                              {DIFFICULTY_OPTIONS.map((difficulty) => (
+                                <option key={difficulty} value={difficulty}>{difficulty}</option>
+                              ))}
+                            </select>
                     </div>
 
                     <label className="mt-7 inline-flex items-center gap-2 text-sm text-slate-600">
@@ -801,9 +996,9 @@ const ChallengeCreator = () => {
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mt-4 rounded-sm border border-slate-200 bg-slate-50 p-3">
                     <div className="mb-2 flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-700">Test Cases</p>
+                      <p className="text-sm font-bold text-slate-700">Test Cases</p>
                       <Button type="button" variant="secondary" onClick={() => addTestCase(questionIndex)}>
                         <FiPlus className="h-4 w-4" />
                         Add Case
@@ -812,7 +1007,7 @@ const ChallengeCreator = () => {
 
                     <div className="space-y-2">
                       {question.validations.map((testCase, testCaseIndex) => (
-                        <div key={`tc-${questionIndex}-${testCaseIndex}`} className="rounded-lg border border-slate-200 bg-white p-2.5">
+                        <div key={`tc-${questionIndex}-${testCaseIndex}`} className="rounded-sm border border-slate-200 bg-white p-2.5">
                           <div className="flex items-center justify-between gap-2">
                             <InputField
                               label="Label"
@@ -822,7 +1017,7 @@ const ChallengeCreator = () => {
                             />
                             <button
                               type="button"
-                              className="mt-7 inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50"
+                              className="mt-7 inline-flex items-center gap-1 rounded-sm border border-rose-200 px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50"
                               onClick={() => removeTestCase(questionIndex, testCaseIndex)}
                             >
                               <FiTrash2 className="h-3.5 w-3.5" />
@@ -852,41 +1047,33 @@ const ChallengeCreator = () => {
                       ))}
                     </div>
                   </div>
-                </article>
-              ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+              
+              <div className="mt-4 flex justify-center">
+                <Button type="button" variant="secondary" onClick={addQuestion} className="px-6">
+                  <FiPlus className="h-4 w-4" />
+                  Add Question
+                </Button>
+              </div>
             </div>
-          </section>
+        </section>
 
-          <section className="app-page">
-            <Card className="compiler-card">
-              <Card.Header>
-                <h3 className="section-title">Editable JSON Payload</h3>
-                <p className="body-sm mt-1">Form and JSON are synced both ways automatically.</p>
-              </Card.Header>
-              <Card.Body>
-                <textarea
-                  className="form-input min-h-[420px] font-mono text-xs"
-                  value={jsonInput}
-                  onChange={(event) => handleJsonInputChange(event.target.value)}
-                  onFocus={() => setIsEditingJson(true)}
-                  onBlur={handleJsonEditorBlur}
-                  spellCheck={false}
-                  placeholder="Paste payload JSON here"
-                />
-
-                {jsonError && <Alert className="mt-2">{jsonError}</Alert>}
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" onClick={createChallenge} disabled={submitting}>
-                    <FiSend className="h-4 w-4" />
-                    {submitting
-                      ? (sourceChallengeId ? 'Saving...' : 'Creating...')
-                      : (sourceChallengeId ? 'Save Challenge' : 'Create Challenge')}
-                  </Button>
-                </div>
-              </Card.Body>
-            </Card>
-          </section>
+        <div className="mt-6 flex justify-center">
+          <Button
+            type="button"
+            onClick={createChallenge}
+            disabled={submitting}
+            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105"
+          >
+            <FiSend className="h-5 w-5" />
+            {submitting
+              ? (sourceChallengeId ? 'Saving...' : 'Creating...')
+              : (sourceChallengeId ? 'Save Challenge' : 'Create Challenge')}
+          </Button>
         </div>
 
         {result && (

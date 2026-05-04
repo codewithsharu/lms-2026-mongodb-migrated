@@ -75,7 +75,6 @@ const Layout = ({ children }) => {
       ],
       teacher: [
         { name: 'Dashboard', path: '/teacher', icon: FiHome },
-        { name: 'My Students', path: '/teacher/students', icon: FiUsers },
         { name: 'My Classes', path: '/teacher/classes', icon: FiBook },
         { name: 'Question Bank', path: '/teacher/assessments/templates', icon: FiClipboard },
         { name: 'Challenges', path: '/teacher/compiler/challenges', icon: FiTerminal },

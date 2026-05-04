@@ -17,6 +17,24 @@ import {
   FiBriefcase,
   FiLayers
 } from 'react-icons/fi';
+import {
+  Box,
+  FormControl,
+  InputAdornment,
+  MenuItem,
+  Paper,
+  Select,
+  Tab,
+  Tabs,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography
+} from '@mui/material';
 import { userAPI, classAPI } from '../../services/api';
 import Layout from '../../components/Layout';
 import Card from '../../components/ui/Card';
@@ -50,6 +68,7 @@ const UserManagement = ({ fixedRole = '' }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [createErrors, setCreateErrors] = useState({});
   const [resetPasswordValue, setResetPasswordValue] = useState('123456789');
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
 
@@ -219,23 +238,53 @@ const UserManagement = ({ fixedRole = '' }) => {
 
   
 
+  const validateCreateForm = () => {
+    const errors = {};
+
+    const requireField = (field, label) => {
+      if (!String(formData[field] || '').trim()) {
+        errors[field] = `${label} is required`;
+      }
+    };
+
+    requireField('full_name', 'Full name');
+    requireField('email', 'Email');
+    requireField('phone', 'Phone');
+
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Email is invalid';
+    }
+
+    if (formData.role === 'student') {
+      requireField('roll_number', 'Roll number');
+      requireField('class_id', 'Class');
+      requireField('section_id', 'Section');
+      requireField('zone', 'Zone');
+    }
+
+    if (formData.role === 'teacher') {
+      requireField('employee_id', 'Employee ID');
+    }
+
+    return errors;
+  };
+
   const handleCreateUser = async (e) => {
     e.preventDefault();
 
     if (formData.role === 'student' && classesLoading) {
-      toast.error('Please wait while classes are loading');
+      setCreateErrors({ class_id: 'Classes are still loading' });
       return;
     }
 
     if (formData.role === 'student' && !hasAvailableClasses) {
-      toast.error('Create a class first before adding students');
+      setCreateErrors({ class_id: 'Create a class before adding students' });
       return;
     }
 
-    if (formData.role === 'student' && !formData.class_id) {
-      toast.error('Class is required for students');
-      return;
-    }
+    const errors = validateCreateForm();
+    setCreateErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
     setFormLoading(true);
 
@@ -487,6 +536,7 @@ const UserManagement = ({ fixedRole = '' }) => {
       employee_id: ''
     });
     setSections([]);
+    setCreateErrors({});
   };
 
   const getZoneClasses = (zone) => {
@@ -550,33 +600,44 @@ const UserManagement = ({ fixedRole = '' }) => {
         </div>
 
         <Card>
-          <Card.Body className="grid grid-cols-1 gap-4 md:grid-cols-12">
-            <InputField
-              className="md:col-span-8"
-              leftIcon={FiSearch}
-              placeholder={`Search ${entityPluralLabel.toLowerCase()} by name or email`}
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setSelectedUserIds([]);
-                setPagination((prev) => ({ ...prev, page: 1 }));
-              }}
-            />
-            {!fixedRole && (
-              <SelectField
-                className="md:col-span-4"
-                value={roleFilter}
+          <Card.Body>
+            <Box display="grid" gridTemplateColumns={{ xs: '1fr', md: fixedRole ? '1fr' : '1fr 240px' }} gap={2}>
+              <TextField
+                label="Search"
+                size="small"
+                placeholder={`Search ${entityPluralLabel.toLowerCase()} by name or email`}
+                value={searchQuery}
                 onChange={(e) => {
-                  setRoleFilter(e.target.value);
+                  setSearchQuery(e.target.value);
                   setSelectedUserIds([]);
                   setPagination((prev) => ({ ...prev, page: 1 }));
                 }}
-              >
-                <option value="">All Roles</option>
-                <option value="student">Students</option>
-                <option value="teacher">Teachers</option>
-              </SelectField>
-            )}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <FiSearch className="h-4 w-4" />
+                    </InputAdornment>
+                  )
+                }}
+              />
+              {!fixedRole && (
+                <FormControl size="small">
+                  <Select
+                    displayEmpty
+                    value={roleFilter}
+                    onChange={(e) => {
+                      setRoleFilter(e.target.value);
+                      setSelectedUserIds([]);
+                      setPagination((prev) => ({ ...prev, page: 1 }));
+                    }}
+                  >
+                    <MenuItem value="">All Roles</MenuItem>
+                    <MenuItem value="student">Students</MenuItem>
+                    <MenuItem value="teacher">Teachers</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
+            </Box>
           </Card.Body>
         </Card>
 
@@ -588,89 +649,95 @@ const UserManagement = ({ fixedRole = '' }) => {
             </div>
 
             {isStudentManagement && (
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <div className="inline-flex w-fit rounded-lg border border-slate-200 bg-white p-1">
-                  <button
-                    type="button"
-                    onClick={() => handleStudentTabChange('assigned')}
-                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                      studentTab === 'assigned' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    Assigned Students
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleStudentTabChange('unassigned')}
-                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                      studentTab === 'unassigned' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    Unassigned Students
-                  </button>
-                </div>
-              </div>
+              <Paper variant="outlined" sx={{ px: 2, py: 1.5 }}>
+                <Tabs
+                  value={studentTab}
+                  onChange={(_, value) => handleStudentTabChange(value)}
+                  textColor="primary"
+                  indicatorColor="primary"
+                >
+                  <Tab value="assigned" label="Assigned Students" />
+                  <Tab value="unassigned" label="Unassigned Students" />
+                </Tabs>
+              </Paper>
             )}
 
-            <div className="table-shell overflow-x-auto">
-              <table>
-                <thead>
-                  <tr>
-                                        <th>User</th>
-                    <th>Role</th>
-                    <th>Details</th>
-                    <th>Status</th>
-                    <th className={`${isUnassignedStudentsTab ? 'w-[240px]' : 'w-[170px]'} text-right`}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small" aria-label="users table">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>User</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell>Details</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {loading ? (
                     [...Array(5)].map((_, i) => (
-                      <tr key={i}>
-                        <td>
+                      <TableRow key={i}>
+                        <TableCell>
                           <div className="h-5 w-40 animate-pulse rounded bg-slate-100" />
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="h-5 w-20 animate-pulse rounded bg-slate-100" />
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="h-5 w-32 animate-pulse rounded bg-slate-100" />
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="h-5 w-20 animate-pulse rounded bg-slate-100" />
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell align="right">
                           <div className="ml-auto h-5 w-24 animate-pulse rounded bg-slate-100" />
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))
                   ) : users.length > 0 ? (
                     users.map((user) => (
-                      <tr key={user.id} className="align-top">
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+                      <TableRow key={user.id} hover>
+                        <TableCell>
+                          <Box display="flex" alignItems="center" gap={2}>
+                            <Box
+                              sx={{
+                                height: 40,
+                                width: 40,
+                                borderRadius: '999px',
+                                backgroundColor: '#DBEAFE',
+                                color: '#1D4ED8',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 600,
+                                fontSize: 14
+                              }}
+                            >
                               {user.full_name?.charAt(0)?.toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-medium text-slate-800">{user.full_name}</p>
-                              <p className="text-sm text-slate-500">{user.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
+                            </Box>
+                            <Box>
+                              <Typography variant="body2" fontWeight={600} color="text.primary">
+                                {user.full_name}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {user.email}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
                           <span className={`${user.role === 'student' ? 'status-badge info' : 'status-badge success'} capitalize`}>
                             {user.role}
                           </span>
-                        </td>
-                        <td>{renderRoleDetails(user)}</td>
-                        <td>
+                        </TableCell>
+                        <TableCell>{renderRoleDetails(user)}</TableCell>
+                        <TableCell>
                           <span className={user.is_active ? 'status-badge success' : 'status-badge error'}>
                             {user.is_active ? 'Active' : 'Inactive'}
                           </span>
-                        </td>
-                        <td>
-                          <div className="flex items-start justify-end gap-2">
+                        </TableCell>
+                        <TableCell align="right">
+                          <Box display="flex" justifyContent="flex-end" gap={4}>
                             <Button variant="secondary" className="!h-9 !w-9 !p-0" onClick={() => openEditModal(user)}>
                               <FiEdit2 className="h-[15px] w-[15px]" />
                             </Button>
@@ -687,22 +754,22 @@ const UserManagement = ({ fixedRole = '' }) => {
                             >
                               <FiTrash2 className="h-[15px] w-[15px]" />
                             </Button>
-                          </div>
-                        </td>
-                      </tr>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
                     ))
                   ) : (
-                    <tr>
-                      <td colSpan={tableColumnCount} className="py-14 text-center text-slate-500">
+                    <TableRow>
+                      <TableCell colSpan={tableColumnCount} align="center" sx={{ py: 6, color: 'text.secondary' }}>
                         {isStudentManagement
                           ? (isUnassignedStudentsTab ? 'No unassigned students found.' : 'No assigned students found.')
                           : `No ${entityPluralLabel.toLowerCase()} found.`}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </TableContainer>
 
             {pagination.totalPages > 1 && (
               <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -808,25 +875,43 @@ const UserManagement = ({ fixedRole = '' }) => {
               leftIcon={FiUser}
               required
               value={formData.full_name}
-              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, full_name: e.target.value });
+                if (createErrors.full_name) {
+                  setCreateErrors((prev) => ({ ...prev, full_name: '' }));
+                }
+              }}
               placeholder="John Doe"
             />
+            {createErrors.full_name && <p className="mt-1 text-xs text-red-600">{createErrors.full_name}</p>}
             <InputField
               label="Email *"
               type="email"
               leftIcon={FiMail}
               required
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, email: e.target.value });
+                if (createErrors.email) {
+                  setCreateErrors((prev) => ({ ...prev, email: '' }));
+                }
+              }}
               placeholder="john@example.com"
             />
+            {createErrors.email && <p className="mt-1 text-xs text-red-600">{createErrors.email}</p>}
             <InputField
               label="Phone"
               leftIcon={FiPhone}
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, phone: e.target.value });
+                if (createErrors.phone) {
+                  setCreateErrors((prev) => ({ ...prev, phone: '' }));
+                }
+              }}
               placeholder="1234567890"
             />
+            {createErrors.phone && <p className="mt-1 text-xs text-red-600">{createErrors.phone}</p>}
           </div>
 
           {formData.role === 'student' && (
@@ -835,14 +920,25 @@ const UserManagement = ({ fixedRole = '' }) => {
                 label="Roll Number *"
                 required
                 value={formData.roll_number}
-                onChange={(e) => setFormData({ ...formData, roll_number: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, roll_number: e.target.value });
+                  if (createErrors.roll_number) {
+                    setCreateErrors((prev) => ({ ...prev, roll_number: '' }));
+                  }
+                }}
                 placeholder="STU001"
               />
+              {createErrors.roll_number && <p className="mt-1 text-xs text-red-600">{createErrors.roll_number}</p>}
               <SelectField
                 label="Class *"
                 required
                 value={formData.class_id}
-                onChange={(e) => setFormData({ ...formData, class_id: e.target.value, section_id: '' })}
+                onChange={(e) => {
+                  setFormData({ ...formData, class_id: e.target.value, section_id: '' });
+                  if (createErrors.class_id) {
+                    setCreateErrors((prev) => ({ ...prev, class_id: '' }));
+                  }
+                }}
                 disabled={classesLoading || !hasAvailableClasses}
               >
                 <option value="">{classesLoading ? 'Loading classes...' : 'Select Class'}</option>
@@ -852,10 +948,16 @@ const UserManagement = ({ fixedRole = '' }) => {
                   </option>
                 ))}
               </SelectField>
+              {createErrors.class_id && <p className="mt-1 text-xs text-red-600">{createErrors.class_id}</p>}
               <SelectField
                 label="Section"
                 value={formData.section_id}
-                onChange={(e) => setFormData({ ...formData, section_id: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, section_id: e.target.value });
+                  if (createErrors.section_id) {
+                    setCreateErrors((prev) => ({ ...prev, section_id: '' }));
+                  }
+                }}
                 disabled={!formData.class_id}
               >
                 <option value="">Select Section</option>
@@ -865,10 +967,16 @@ const UserManagement = ({ fixedRole = '' }) => {
                   </option>
                 ))}
               </SelectField>
+              {createErrors.section_id && <p className="mt-1 text-xs text-red-600">{createErrors.section_id}</p>}
               <SelectField
                 label="Zone"
                 value={formData.zone}
-                onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, zone: e.target.value });
+                  if (createErrors.zone) {
+                    setCreateErrors((prev) => ({ ...prev, zone: '' }));
+                  }
+                }}
               >
                 <option value="">Select Zone</option>
                 {zones.map((zone) => (
@@ -877,17 +985,26 @@ const UserManagement = ({ fixedRole = '' }) => {
                   </option>
                 ))}
               </SelectField>
+              {createErrors.zone && <p className="mt-1 text-xs text-red-600">{createErrors.zone}</p>}
             </div>
           )}
 
           {formData.role === 'teacher' && (
-            <InputField
-              label="Employee ID *"
-              required
-              value={formData.employee_id}
-              onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-              placeholder="EMP001"
-            />
+            <>
+              <InputField
+                label="Employee ID *"
+                required
+                value={formData.employee_id}
+                onChange={(e) => {
+                  setFormData({ ...formData, employee_id: e.target.value });
+                  if (createErrors.employee_id) {
+                    setCreateErrors((prev) => ({ ...prev, employee_id: '' }));
+                  }
+                }}
+                placeholder="EMP001"
+              />
+              {createErrors.employee_id && <p className="mt-1 text-xs text-red-600">{createErrors.employee_id}</p>}
+            </>
           )}
         </form>
       </Modal>
