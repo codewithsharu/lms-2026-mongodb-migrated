@@ -6,9 +6,18 @@ const InputField = ({
   inputClassName = '',
   ...props
 }) => {
+  const labelText = label ? String(label) : '';
+  const hasLabelStar = labelText.includes('*');
+  const cleanLabel = labelText.replace(/\s*\*+\s*$/, '');
+
   return (
     <div className={className}>
-      {label && <label className="form-label">{label}</label>}
+      {label && (
+        <label className="form-label">
+          {cleanLabel}
+          {(props.required || hasLabelStar) && <span className="ml-1 text-red-500">*</span>}
+        </label>
+      )}
       <div className="relative">
         {LeftIcon && (
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

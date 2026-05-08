@@ -37,6 +37,7 @@ import AdminAnalytics from './pages/admin/Analytics';
 import AdminSettings from './pages/admin/Settings';
 import HealthCheck from './pages/admin/HealthCheck';
 import HealthCheckTable from './pages/admin/HealthCheckTable';
+import AdminDepartments from './pages/admin/Departments';
 import TeacherDashboard from './pages/teacher/Dashboard';
 import TeacherClasses from './pages/teacher/Classes';
 import TeacherClassStudents from './pages/teacher/ClassStudents';
@@ -118,6 +119,14 @@ function App() {
                 <ClassManagement />
               </ProtectedRoute>
             } 
+          />
+          <Route
+            path="/admin/departments"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminDepartments />
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/admin/classes/:classId/manage" 

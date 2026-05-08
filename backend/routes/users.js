@@ -4,6 +4,7 @@ const XLSX = require('xlsx');
 const User = require('../models/User');
 const StudentDetail = require('../models/StudentDetail');
 const TeacherDetail = require('../models/TeacherDetail');
+const Department = require('../models/Department');
 const TeacherAssignment = require('../models/TeacherAssignment');
 const AuditLog = require('../models/AuditLog');
 const Class = require('../models/Class');
@@ -97,13 +98,37 @@ const cleanupUserDependencies = async ({ userId, role }) => {
   await User.updateMany({ created_by: userId }, { $set: { created_by: null } });
 };
 
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const resolveDepartmentName = async (value) => {
+  const name = String(value || '').trim();
+  if (!name) return null;
+  const match = await Department.findOne({ name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' }, is_active: true })
+    .select('name')
+    .lean();
+  return match ? match.name : null;
+};
+
+const normalizeIdList = (ids) => {
+  if (!Array.isArray(ids)) return [];
+  return ids.map((id) => String(id)).filter((id) => id.trim().length > 0);
+};
+
+const normalizeDepartmentInput = (value) => {
+  if (value === null || value === undefined) return { provided: false, value: null };
+  const name = String(value || '').trim();
+  if (!name) return { provided: true, value: null };
+  return { provided: true, value: name };
+};
+
 // Get all users (Admin only)
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const { role, class_id, section_id, zone, assignment_status, search, page = 1, limit = 20 } = req.query;
+    const { role, class_id, section_id, zone, assignment_status, status, search, page = 1, limit = 20 } = req.query;
 
     const normalizedRole = String(role || '').trim().toLowerCase();
     const normalizedAssignmentStatus = String(assignment_status || '').trim().toLowerCase();
+    const normalizedStatus = String(status || '').trim().toLowerCase();
     const effectiveRole = normalizedRole || (normalizedAssignmentStatus ? 'student' : '');
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
     const limitNumber = Math.max(1, parseInt(limit, 10) || 20);
@@ -111,6 +136,10 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
 
     if (normalizedAssignmentStatus && !['assigned', 'unassigned'].includes(normalizedAssignmentStatus)) {
       return res.status(400).json({ error: 'assignment_status must be either assigned or unassigned' });
+    }
+
+    if (normalizedStatus && !['active', 'inactive'].includes(normalizedStatus)) {
+      return res.status(400).json({ error: 'status must be either active or inactive' });
     }
 
     let filteredStudentUserIds = null;
@@ -134,6 +163,7 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
 
     let filter = {};
     if (effectiveRole) filter.role = effectiveRole;
+    if (normalizedStatus) filter.is_active = normalizedStatus === 'active';
     if (filteredStudentUserIds && filteredStudentUserIds.length > 0) filter._id = { $in: filteredStudentUserIds };
     if (search) {
       filter.$or = [
@@ -177,6 +207,177 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// Bulk update student status (Admin only)
+router.post('/bulk-update-status', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const ids = normalizeIdList(req.body?.ids);
+    const { is_active } = req.body || {};
+
+    if (!ids.length) return res.status(400).json({ error: 'Student ids are required' });
+    if (typeof is_active !== 'boolean') return res.status(400).json({ error: 'is_active must be boolean' });
+
+    const students = await User.find({ _id: { $in: ids }, role: 'student' }).select('_id is_active').lean();
+    if (!students.length) return res.status(404).json({ error: 'No matching students found' });
+
+    const studentIds = students.map((s) => s._id);
+    const result = await User.updateMany({ _id: { $in: studentIds } }, { $set: { is_active } });
+
+    await logAction(req, 'BULK_UPDATE', 'user', null, { role: 'student', is_active, count: studentIds.length });
+    res.json({ message: 'Student status updated', matched: result.matchedCount, modified: result.modifiedCount });
+  } catch (error) {
+    console.error('Bulk update status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Bulk update teachers (Admin only)
+router.post('/bulk-update-teachers', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const ids = normalizeIdList(req.body?.ids);
+    const { is_active } = req.body || {};
+    const departmentInput = normalizeDepartmentInput(req.body?.department);
+
+    if (!ids.length) return res.status(400).json({ error: 'Teacher ids are required' });
+    if (is_active === undefined && !departmentInput.provided) {
+      return res.status(400).json({ error: 'No update fields provided' });
+    }
+
+    const teachers = await User.find({ _id: { $in: ids }, role: 'teacher' }).select('_id').lean();
+    if (!teachers.length) return res.status(404).json({ error: 'No matching teachers found' });
+
+    const teacherIds = teachers.map((t) => t._id);
+    let normalizedDepartment = null;
+
+    if (departmentInput.provided && departmentInput.value) {
+      normalizedDepartment = await resolveDepartmentName(departmentInput.value);
+      if (!normalizedDepartment) return res.status(400).json({ error: 'Department not found or inactive' });
+    }
+
+    if (is_active !== undefined) {
+      if (typeof is_active !== 'boolean') return res.status(400).json({ error: 'is_active must be boolean' });
+      await User.updateMany({ _id: { $in: teacherIds } }, { $set: { is_active } });
+    }
+
+    if (departmentInput.provided) {
+      await TeacherDetail.updateMany(
+        { user_id: { $in: teacherIds } },
+        { $set: { department: normalizedDepartment || null } }
+      );
+    }
+
+    await logAction(req, 'BULK_UPDATE', 'user', null, {
+      role: 'teacher',
+      is_active: is_active === undefined ? undefined : is_active,
+      department: departmentInput.provided ? normalizedDepartment || null : undefined,
+      count: teacherIds.length
+    });
+
+    res.json({ message: 'Teachers updated successfully', count: teacherIds.length });
+  } catch (error) {
+    console.error('Bulk update teachers error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Bulk assign unassigned students to class/section/zone (Admin only)
+router.post('/bulk-assign-students', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const ids = normalizeIdList(req.body?.ids);
+    const { class_id, section_id, zone } = req.body || {};
+
+    if (!ids.length) return res.status(400).json({ error: 'Student ids are required' });
+    if (!class_id) return res.status(400).json({ error: 'Class is required for bulk assignment' });
+
+    const enrollmentValidation = await validateStudentEnrollment({ classId: class_id, sectionId: section_id || null });
+    if (!enrollmentValidation.valid) return res.status(400).json({ error: enrollmentValidation.error });
+
+    const students = await User.find({ _id: { $in: ids }, role: 'student' }).select('_id').lean();
+    if (!students.length) return res.status(404).json({ error: 'No matching students found' });
+
+    const studentIds = students.map((s) => s._id);
+    const details = await StudentDetail.find({ user_id: { $in: studentIds } }).select('user_id class_id').lean();
+    const assignedIds = details.filter((d) => d.class_id).map((d) => d.user_id?.toString()).filter(Boolean);
+
+    if (assignedIds.length > 0) {
+      return res.status(400).json({ error: 'Some students are already assigned', assignedIds });
+    }
+
+    const updatePayload = {
+      class_id,
+      section_id: section_id || null,
+      zone: zone ? String(zone).toLowerCase() : null
+    };
+
+    const result = await StudentDetail.updateMany({ user_id: { $in: studentIds } }, updatePayload);
+    await logAction(req, 'BULK_UPDATE', 'student_details', null, { count: studentIds.length, update: updatePayload });
+
+    res.json({ message: 'Students assigned successfully', matched: result.matchedCount, modified: result.modifiedCount });
+  } catch (error) {
+    console.error('Bulk assign students error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Bulk delete students (Admin only)
+router.post('/bulk-delete', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const ids = normalizeIdList(req.body?.ids);
+    if (!ids.length) return res.status(400).json({ error: 'Student ids are required' });
+
+    const students = await User.find({ _id: { $in: ids }, role: 'student' }).select('_id email is_active').lean();
+    if (!students.length) return res.status(404).json({ error: 'No matching students found' });
+
+    let deactivated = 0;
+    let deleted = 0;
+
+    for (const student of students) {
+      if (student.is_active) {
+        await User.findByIdAndUpdate(student._id, { is_active: false });
+        deactivated += 1;
+        continue;
+      }
+
+      await cleanupUserDependencies({ userId: student._id, role: 'student' });
+      await User.findByIdAndDelete(student._id);
+      deleted += 1;
+    }
+
+    await logAction(req, 'BULK_DELETE', 'user', null, { role: 'student', deactivated, deleted });
+    res.json({
+      message: 'Bulk delete processed',
+      deactivated,
+      deleted
+    });
+  } catch (error) {
+    console.error('Bulk delete students error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Bulk delete teachers (Admin only)
+router.post('/bulk-delete-teachers', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const ids = normalizeIdList(req.body?.ids);
+    if (!ids.length) return res.status(400).json({ error: 'Teacher ids are required' });
+
+    const teachers = await User.find({ _id: { $in: ids }, role: 'teacher' }).select('_id email').lean();
+    if (!teachers.length) return res.status(404).json({ error: 'No matching teachers found' });
+
+    let deleted = 0;
+    for (const teacher of teachers) {
+      await cleanupUserDependencies({ userId: teacher._id, role: 'teacher' });
+      await User.findByIdAndDelete(teacher._id);
+      deleted += 1;
+    }
+
+    await logAction(req, 'BULK_DELETE', 'user', null, { role: 'teacher', deleted });
+    res.json({ message: 'Teachers deleted successfully', deleted });
+  } catch (error) {
+    console.error('Bulk delete teachers error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get single user (Admin only)
 router.get('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
@@ -214,6 +415,12 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
     if (role === 'student' && !roll_number) return res.status(400).json({ error: 'Roll number is required for students' });
     if (role === 'teacher' && !employee_id) return res.status(400).json({ error: 'Employee ID is required for teachers' });
 
+    let normalizedDepartment = null;
+    if (role === 'teacher' && department) {
+      normalizedDepartment = await resolveDepartmentName(department);
+      if (!normalizedDepartment) return res.status(400).json({ error: 'Department not found or inactive' });
+    }
+
     const sanitizedClassId = class_id || null;
     const sanitizedSectionId = section_id || null;
     const sanitizedZone = zone || null;
@@ -242,7 +449,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
       if (role === 'student') {
         await StudentDetail.create({ user_id: newUser._id, roll_number, class_id: sanitizedClassId, section_id: sanitizedSectionId, zone: sanitizedZone });
       } else if (role === 'teacher') {
-        await TeacherDetail.create({ user_id: newUser._id, employee_id, department: department || null });
+        await TeacherDetail.create({ user_id: newUser._id, employee_id, department: normalizedDepartment || null });
       }
     } catch (detailError) {
       await User.findByIdAndDelete(newUser._id);
@@ -359,6 +566,12 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
     if (!currentUser) return res.status(404).json({ error: 'User not found' });
     if (currentUser.role === 'admin') return res.status(403).json({ error: 'Cannot delete admin users' });
 
+    if (currentUser.role === 'student' && currentUser.is_active) {
+      await User.findByIdAndUpdate(id, { is_active: false });
+      await logAction(req, 'UPDATE', 'user', id, { action: 'deactivate_before_delete' });
+      return res.json({ message: 'Student deactivated. Delete again to remove.' });
+    }
+
     await cleanupUserDependencies({ userId: id, role: currentUser.role });
     await User.findByIdAndDelete(id);
 
@@ -418,6 +631,12 @@ router.post('/bulk-upload', verifyToken, isAdmin, upload.single('file'), async (
         if (role === 'student' && !class_name) { results.failed.push({ row, error: 'Class name required' }); continue; }
         if (role === 'teacher' && !employee_id) { results.failed.push({ row, error: 'Employee ID required' }); continue; }
 
+        let normalizedDepartment = null;
+        if (role === 'teacher' && department) {
+          normalizedDepartment = await resolveDepartmentName(department);
+          if (!normalizedDepartment) { results.failed.push({ row, error: 'Department not found or inactive' }); continue; }
+        }
+
         const existingUser = await User.findOne({ email: normalizedEmail }).select('_id').lean();
         if (existingUser) { results.failed.push({ row, error: 'Email already exists' }); continue; }
 
@@ -437,7 +656,7 @@ router.post('/bulk-upload', verifyToken, isAdmin, upload.single('file'), async (
           if (role === 'student') {
             await StudentDetail.create({ user_id: newUser._id, roll_number, class_id: classId, section_id: sectionId, zone: zone ? zone.toLowerCase() : null });
           } else if (role === 'teacher') {
-            await TeacherDetail.create({ user_id: newUser._id, employee_id, department: department || null });
+            await TeacherDetail.create({ user_id: newUser._id, employee_id, department: normalizedDepartment || null });
           }
         } catch (detailError) {
           await User.findByIdAndDelete(newUser._id);

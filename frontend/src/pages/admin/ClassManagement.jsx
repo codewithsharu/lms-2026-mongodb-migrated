@@ -233,7 +233,10 @@ const ClassManagement = () => {
           {classErrors.name && <p className="mt-1 text-xs text-red-600">{classErrors.name}</p>}
 
           <div>
-            <label className="form-label">Description</label>
+            <label className="form-label">
+              Description
+              <span className="ml-1 text-red-500">*</span>
+            </label>
             <textarea
               value={classForm.description}
               onChange={(e) => {
@@ -250,6 +253,7 @@ const ClassManagement = () => {
 
           <InputField
             label="Academic Year"
+            required
             value={classForm.academic_year}
             onChange={(e) => {
               setClassForm({ ...classForm, academic_year: e.target.value });

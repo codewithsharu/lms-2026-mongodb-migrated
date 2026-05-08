@@ -43,6 +43,11 @@ export const userAPI = {
   create: (userData) => api.post('/users', userData),
   update: (id, userData) => api.put(`/users/${id}`, userData),
   delete: (id) => api.delete(`/users/${id}`),
+  bulkDelete: (ids) => api.post('/users/bulk-delete', { ids }),
+  bulkDeleteTeachers: (ids) => api.post('/users/bulk-delete-teachers', { ids }),
+  bulkUpdateStatus: (ids, isActive) => api.post('/users/bulk-update-status', { ids, is_active: isActive }),
+  bulkUpdateTeachers: (payload) => api.post('/users/bulk-update-teachers', payload),
+  bulkAssignStudents: (ids, data) => api.post('/users/bulk-assign-students', { ids, ...data }),
   resetPassword: (id, newPassword) => api.post(`/users/${id}/reset-password`, { new_password: newPassword }),
   bulkUpload: (file) => {
     const formData = new FormData();
@@ -88,6 +93,13 @@ export const classAPI = {
   getStudents: (classId, params = {}) => api.get(`/classes/${classId}/students`, { params }),
   updateStudentZone: (studentId, data) => api.put(`/classes/students/${studentId}/zone`, data),
   deleteStudent: (classId, studentId) => api.delete(`/classes/${classId}/students/${studentId}`),
+};
+
+export const departmentAPI = {
+  getAll: (params) => api.get('/departments', { params }),
+  create: (data) => api.post('/departments', data),
+  update: (id, data) => api.put(`/departments/${id}`, data),
+  delete: (id) => api.delete(`/departments/${id}`),
 };
 
 export const teacherAPI = {

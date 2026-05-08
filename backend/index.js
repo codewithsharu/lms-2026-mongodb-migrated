@@ -10,6 +10,7 @@ const { auditMiddleware } = require('./middleware/audit');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const classRoutes = require('./routes/classes');
+const departmentRoutes = require('./routes/departments');
 const auditLogRoutes = require('./routes/auditLogs');
 const assessmentRoutes = require('./routes/assessments');
 const compilerRoutes = require('./routes/compiler');
@@ -94,6 +95,7 @@ app.use(auditMiddleware);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/classes', classRoutes);
+app.use('/api/departments', departmentRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/assessments', assessmentRoutes);
 app.use('/api/compiler', compilerRoutes);
@@ -128,7 +130,7 @@ app.get('/api/db-status', async (req, res) => {
 
     const expectedCollections = [
       'users', 'classes', 'sections', 'studentdetails', 'teacherdetails',
-      'teacherassignments', 'auditlogs', 'assessmenttemplates',
+      'teacherassignments', 'auditlogs', 'assessmenttemplates', 'departments',
       'hostedassessments', 'hostedassessmentstudenttargets', 'assessmentattempts'
     ];
 

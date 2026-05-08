@@ -71,6 +71,7 @@ const Layout = ({ children }) => {
         { name: 'Students', path: '/admin/students', icon: FiUsers },
         { name: 'Teachers', path: '/admin/teachers', icon: FiUser },
         { name: 'Classes', path: '/admin/classes', icon: FiBook },
+        { name: 'Departments', path: '/admin/departments', icon: FiBriefcase },
         { name: 'Analytics', path: '/admin/analytics', icon: FiBarChart2 },
       ],
       teacher: [
