@@ -17,6 +17,18 @@ const bulkUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize:
 
 const normalizeZone = (v) => { const z = String(v||'').trim().toLowerCase(); return ['blue','red','green'].includes(z)?z:null; };
 const getPasswordFromEmailPrefix = (email) => { const e=String(email||'').trim().toLowerCase(); const i=e.indexOf('@'); return i>0?e.slice(0,i).trim()||null:null; };
+const normalizeAcademicYear = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return { valid: false, error: 'Academic year is required' };
+  const match = raw.match(/^(\d{4})-(\d{4})$/);
+  if (!match) return { valid: false, error: 'Academic year must be in YYYY-YYYY format' };
+  const startYear = Number(match[1]);
+  const endYear = Number(match[2]);
+  if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || endYear <= startYear) {
+    return { valid: false, error: 'Academic year end must be greater than start year' };
+  }
+  return { valid: true, value: raw };
+};
 
 const hasSectionAccess = (assignments, sectionId) => {
   if (!assignments||!assignments.length) return false;
@@ -76,7 +88,9 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
   try {
     const { name, description, academic_year } = req.body;
     if (!name) return res.status(400).json({ error: 'Class name is required' });
-    const newClass = await Class.create({ name, description: description||null, academic_year: academic_year||null });
+    const yearResult = normalizeAcademicYear(academic_year);
+    if (!yearResult.valid) return res.status(400).json({ error: yearResult.error });
+    const newClass = await Class.create({ name, description: description||null, academic_year: yearResult.value });
     await logAction(req, 'CREATE', 'class', newClass._id.toString(), { name });
     res.status(201).json({ message: 'Class created successfully', class: { ...newClass.toObject(), id: newClass._id } });
   } catch (error) {
@@ -91,7 +105,11 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description||null;
-    if (academic_year !== undefined) updateData.academic_year = academic_year||null;
+    if (academic_year !== undefined) {
+      const yearResult = normalizeAcademicYear(academic_year);
+      if (!yearResult.valid) return res.status(400).json({ error: yearResult.error });
+      updateData.academic_year = yearResult.value;
+    }
     if (is_active !== undefined) updateData.is_active = is_active;
     const updatedClass = await Class.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true }).lean();
     if (!updatedClass) return res.status(404).json({ error: 'Class not found' });
