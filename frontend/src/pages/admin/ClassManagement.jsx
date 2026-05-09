@@ -22,6 +22,19 @@ const ClassManagement = () => {
   const [formLoading, setFormLoading] = useState(false);
   const [classErrors, setClassErrors] = useState({});
 
+  const validateAcademicYear = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return { valid: false, error: 'Academic year is required' };
+    const match = raw.match(/^(\d{4})-(\d{4})$/);
+    if (!match) return { valid: false, error: 'Academic year must be in YYYY-YYYY format' };
+    const startYear = Number(match[1]);
+    const endYear = Number(match[2]);
+    if (!Number.isFinite(startYear) || !Number.isFinite(endYear) || endYear <= startYear) {
+      return { valid: false, error: 'Academic year end must be greater than start year' };
+    }
+    return { valid: true };
+  };
+
   useEffect(() => {
     fetchClasses();
   }, []);
@@ -43,7 +56,8 @@ const ClassManagement = () => {
     const errors = {};
     if (!classForm.name.trim()) errors.name = 'Class name is required';
     if (!classForm.description.trim()) errors.description = 'Description is required';
-    if (!classForm.academic_year.trim()) errors.academic_year = 'Academic year is required';
+    const yearCheck = validateAcademicYear(classForm.academic_year);
+    if (!yearCheck.valid) errors.academic_year = yearCheck.error;
 
     setClassErrors(errors);
     if (Object.keys(errors).length > 0) return;

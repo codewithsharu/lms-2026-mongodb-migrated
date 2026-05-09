@@ -18,33 +18,14 @@ const auditLogSchema = new mongoose.Schema(
     action_type: {
       type: String,
       required: true,
-      enum: [
-        // Assessment actions
-        'assessment_created', 'assessment_updated', 'assessment_deleted', 'assessment_published',
-        'assessment_started', 'assessment_resumed', 'assessment_submitted', 'assessment_autosaved',
-        'assessment_timeout', 'assessment_abandoned',
-        // Data persistence actions
-        'backup_created', 'backup_restored', 'backup_deleted', 'backup_validated',
-        'progressive_save_started', 'progressive_save_stopped',
-        // Scoring actions
-        'score_calculated', 'best_score_updated', 'achievement_earned',
-        'performance_analytics_updated',
-        // Session actions
-        'session_started', 'session_ended', 'session_conflict', 'session_takeover',
-        // Data integrity actions
-        'data_validated', 'data_corrupted', 'data_recovered', 'data_synced',
-        // System actions
-        'cleanup_performed', 'system_error', 'user_action', 'api_call'
-      ],
     },
     resource_type: {
       type: String,
       required: true,
-      enum: ['AssessmentAttempt', 'AttemptDataBackup', 'BestScoreRecord', 'HostedAssessment', 'User', 'System'],
     },
     resource_id: {
       type: String,
-      required: true,
+      default: null,
     },
     // API information
     api_endpoint: {
