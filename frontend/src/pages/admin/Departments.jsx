@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FiPlus, FiEdit2, FiTrash2, FiSearch } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiUsers } from 'react-icons/fi';
 import {
   Box,
   FormControl,
@@ -33,10 +33,13 @@ const Departments = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showTeachersModal, setShowTeachersModal] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [formErrors, setFormErrors] = useState({});
+  const [teachers, setTeachers] = useState([]);
+  const [teachersLoading, setTeachersLoading] = useState(false);
 
   const getEmptyForm = () => ({ name: '', description: '', is_active: true });
   const [formData, setFormData] = useState(getEmptyForm());
@@ -145,6 +148,21 @@ const Departments = () => {
       is_active: dept.is_active ?? true,
     });
     setShowEditModal(true);
+  };
+
+  const openTeachersModal = async (dept) => {
+    setSelectedDepartment(dept);
+    setShowTeachersModal(true);
+    setTeachersLoading(true);
+    try {
+      const response = await departmentAPI.getTeachers(dept.id);
+      setTeachers(response.data?.teachers || []);
+    } catch (error) {
+      toast.error('Failed to fetch teachers');
+      setTeachers([]);
+    } finally {
+      setTeachersLoading(false);
+    }
   };
 
   return (
@@ -260,6 +278,9 @@ const Departments = () => {
                         </TableCell>
                         <TableCell align="right">
                           <div className="flex justify-end gap-3">
+                            <Button variant="secondary" className="!h-9 !w-9 !p-0" onClick={() => openTeachersModal(dept)}>
+                              <FiUsers className="h-[15px] w-[15px]" />
+                            </Button>
                             <Button variant="secondary" className="!h-9 !w-9 !p-0" onClick={() => openEditModal(dept)}>
                               <FiEdit2 className="h-[15px] w-[15px]" />
                             </Button>
@@ -474,6 +495,79 @@ const Departments = () => {
             Are you sure you want to delete <span className="font-semibold text-slate-800">{selectedDepartment.name}</span>?
           </p>
         )}
+      </Modal>
+
+      <Modal
+        open={showTeachersModal && !!selectedDepartment}
+        onClose={() => {
+          setShowTeachersModal(false);
+          setSelectedDepartment(null);
+          setTeachers([]);
+        }}
+        title={`Teachers - ${selectedDepartment?.name || ''}`}
+        subtitle={`View teachers assigned to this department`}
+        maxWidth="max-w-2xl"
+        footer={
+          <div className="flex justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowTeachersModal(false);
+                setSelectedDepartment(null);
+                setTeachers([]);
+              }}
+            >
+              Close
+            </Button>
+          </div>
+        }
+      >
+        {teachersLoading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-16 w-full animate-pulse rounded bg-slate-100" />
+          ))}
+        </div>
+      ) : teachers.length > 0 ? (
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Employee ID</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {teachers.map((teacher) => (
+                <TableRow key={teacher.id} hover>
+                  <TableCell>
+                    <Typography variant="body2">{teacher.employee_id}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight={600}>
+                      {teacher.full_name}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="text.secondary">
+                      {teacher.email}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <span className={teacher.is_active ? 'status-badge success' : 'status-badge warning'}>
+                      {teacher.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ) : (
+        <div className="py-8 text-center text-slate-500">No teachers found in this department.</div>
+      )}
       </Modal>
     </Layout>
   );
