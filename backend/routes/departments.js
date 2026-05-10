@@ -119,4 +119,31 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// Get teachers by department (Admin)
+router.get('/:id/teachers', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const department = await Department.findById(req.params.id).lean();
+    if (!department) return res.status(404).json({ error: 'Department not found' });
+
+    const teacherDetails = await TeacherDetail.find({ department: department.name })
+      .populate('user_id', 'full_name email phone profile_photo is_active')
+      .lean();
+
+    const teachers = teacherDetails.map((td) => ({
+      id: td.user_id._id,
+      employee_id: td.employee_id,
+      full_name: td.user_id.full_name,
+      email: td.user_id.email,
+      phone: td.user_id.phone,
+      profile_photo: td.user_id.profile_photo,
+      is_active: td.user_id.is_active,
+    }));
+
+    res.json({ teachers, department_name: department.name });
+  } catch (error) {
+    console.error('Get teachers by department error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

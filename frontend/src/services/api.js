@@ -100,6 +100,7 @@ export const departmentAPI = {
   create: (data) => api.post('/departments', data),
   update: (id, data) => api.put(`/departments/${id}`, data),
   delete: (id) => api.delete(`/departments/${id}`),
+  getTeachers: (id) => api.get(`/departments/${id}/teachers`),
 };
 
 export const teacherAPI = {
