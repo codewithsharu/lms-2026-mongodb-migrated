@@ -3,6 +3,7 @@ import { FiBarChart2, FiCheckCircle, FiClock, FiEye } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import Layout from '../../components/Layout';
 import Card from '../../components/ui/Card';
+import Modal from '../../components/ui/Modal';
 import StatCard from '../../components/ui/StatCard';
 import { assessmentAPI } from '../../services/api';
 
@@ -12,8 +13,8 @@ const formatScoreLine = (attempt) => {
   const score = Number(attempt.score ?? 0);
   const total = Number(attempt.total_marks ?? 0);
   const percentage = Number(attempt.percentage ?? 0);
-
-  return `${score} / ${total}${Number.isFinite(percentage) ? ` (${percentage}%)` : ''}`;
+  const percentageLabel = Number.isFinite(percentage) ? `${percentage}%` : '0%';
+  return `${score} / ${total} (${percentageLabel})`;
 };
 
 const formatDateTime = (value) => {
@@ -57,6 +58,18 @@ const getVisibilityDetails = (item) => {
 const StudentResults = () => {
   const [loading, setLoading] = useState(true);
   const [results, setResults] = useState([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyTarget, setHistoryTarget] = useState(null);
+  const openHistoryModal = (item) => {
+    setHistoryTarget(item);
+    setShowHistoryModal(true);
+  };
+
+  const closeHistoryModal = () => {
+    setShowHistoryModal(false);
+    setHistoryTarget(null);
+  };
+
 
   const fetchData = async () => {
     try {
@@ -125,6 +138,7 @@ const StudentResults = () => {
                       <th>Visibility</th>
                       <th>Latest Score</th>
                       <th>Best Score</th>
+                      <th>History</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -173,6 +187,23 @@ const StudentResults = () => {
                               <span className="text-sm text-slate-400">-</span>
                             )}
                           </td>
+                          <td>
+                            {item.attemptHistory && item.attemptHistory.length > 0 ? (
+                              item.resultVisible ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary !h-8 !px-3"
+                                  onClick={() => openHistoryModal(item)}
+                                >
+                                  View History
+                                </button>
+                              ) : (
+                                <span className="text-sm text-slate-500">Hidden until release</span>
+                              )
+                            ) : (
+                              <span className="text-sm text-slate-400">-</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -193,6 +224,44 @@ const StudentResults = () => {
           </Card.Body>
         </Card>
       </div>
+
+      <Modal
+        open={showHistoryModal}
+        onClose={closeHistoryModal}
+        title="Result History"
+        subtitle={historyTarget?.title ? `Assessment: ${historyTarget.title}` : 'Assessment results'}
+        maxWidth="max-w-2xl"
+        footer={
+          <div className="flex justify-end">
+            <button type="button" className="btn btn-secondary" onClick={closeHistoryModal}>
+              Close
+            </button>
+          </div>
+        }
+      >
+        {historyTarget?.attemptHistory && historyTarget.attemptHistory.length > 0 ? (
+          <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-3">
+            {historyTarget.attemptHistory.map((attempt) => (
+              <div
+                key={attempt.id || `${historyTarget.examId}-${attempt.attempt_number}`}
+                className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-800">
+                    Attempt #{attempt.attempt_number || 1}
+                  </p>
+                  <span className="text-sm font-semibold text-slate-700">
+                    {formatScoreLine(attempt)}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">{formatShortDate(attempt.submitted_at)}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">No attempt history available.</p>
+        )}
+      </Modal>
     </Layout>
   );
 };

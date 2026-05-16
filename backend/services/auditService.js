@@ -141,7 +141,7 @@ class AuditService {
         security_info: {
           authentication_method: securityInfo?.authenticationMethod,
           authorization_status: securityInfo?.authorizationStatus,
-          risk_level,
+          risk_level: riskLevel,
           compliance_flags: securityInfo?.complianceFlags || [],
         },
         error_info: errorInfo ? {

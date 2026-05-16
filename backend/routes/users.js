@@ -318,6 +318,38 @@ router.post('/bulk-assign-students', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// Bulk update assigned students to class/section/zone (Admin only)
+router.post('/bulk-update-students', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const ids = normalizeIdList(req.body?.ids);
+    const { class_id, section_id, zone } = req.body || {};
+
+    if (!ids.length) return res.status(400).json({ error: 'Student ids are required' });
+    if (!class_id) return res.status(400).json({ error: 'Class is required for bulk update' });
+
+    const enrollmentValidation = await validateStudentEnrollment({ classId: class_id, sectionId: section_id || null });
+    if (!enrollmentValidation.valid) return res.status(400).json({ error: enrollmentValidation.error });
+
+    const students = await User.find({ _id: { $in: ids }, role: 'student' }).select('_id').lean();
+    if (!students.length) return res.status(404).json({ error: 'No matching students found' });
+
+    const studentIds = students.map((s) => s._id);
+    const updatePayload = {
+      class_id,
+      section_id: section_id || null,
+      zone: zone ? String(zone).toLowerCase() : null
+    };
+
+    const result = await StudentDetail.updateMany({ user_id: { $in: studentIds } }, updatePayload);
+    await logAction(req, 'BULK_UPDATE', 'student_details', null, { count: studentIds.length, update: updatePayload });
+
+    res.json({ message: 'Students updated successfully', matched: result.matchedCount, modified: result.modifiedCount });
+  } catch (error) {
+    console.error('Bulk update students error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Bulk delete students (Admin only)
 router.post('/bulk-delete', verifyToken, isAdmin, async (req, res) => {
   try {

@@ -74,6 +74,7 @@ const UserManagement = ({ fixedRole = '' }) => {
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [showBulkUpdateAssignmentModal, setShowBulkUpdateAssignmentModal] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showBulkTeacherStatusModal, setShowBulkTeacherStatusModal] = useState(false);
   const [showBulkTeacherDepartmentModal, setShowBulkTeacherDepartmentModal] = useState(false);
@@ -230,7 +231,8 @@ const UserManagement = ({ fixedRole = '' }) => {
   }, [isStudentManagement, classFilter]);
 
   useEffect(() => {
-    if (!showBulkAssignModal || !bulkAssignForm.class_id) {
+    const bulkModalOpen = showBulkAssignModal || showBulkUpdateAssignmentModal;
+    if (!bulkModalOpen || !bulkAssignForm.class_id) {
       setBulkSections([]);
       return;
     }
@@ -245,7 +247,7 @@ const UserManagement = ({ fixedRole = '' }) => {
     };
 
     loadBulkSections();
-  }, [showBulkAssignModal, bulkAssignForm.class_id]);
+  }, [showBulkAssignModal, showBulkUpdateAssignmentModal, bulkAssignForm.class_id]);
 
   const fetchUsers = async () => {
     try {
@@ -708,6 +710,38 @@ const UserManagement = ({ fixedRole = '' }) => {
     }
   };
 
+  const handleBulkUpdateAssignment = async () => {
+    if (!selectedUserIds.length) return;
+
+    if (!bulkAssignForm.class_id) {
+      toast.error('Class is required');
+      return;
+    }
+
+    if (!bulkAssignForm.section_id) {
+      toast.error('Section is required');
+      return;
+    }
+
+    try {
+      setBulkActionLoading(true);
+      const response = await userAPI.bulkUpdateStudentAssignments(selectedUserIds, {
+        class_id: bulkAssignForm.class_id,
+        section_id: bulkAssignForm.section_id || null,
+        zone: bulkAssignForm.zone || null
+      });
+      toast.success(response.data?.message || 'Students updated');
+      setShowBulkUpdateAssignmentModal(false);
+      setBulkAssignForm({ class_id: '', section_id: '', zone: '' });
+      setSelectedUserIds([]);
+      fetchUsers();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update students');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
   const handleBulkDelete = async () => {
     if (!selectedUserIds.length) return;
 
@@ -784,6 +818,29 @@ const UserManagement = ({ fixedRole = '' }) => {
     } finally {
       setBulkActionLoading(false);
     }
+  };
+
+  const getSelectedAssignmentDefaults = () => {
+    const selectedStudents = users.filter((user) => selectedUserIds.includes(user.id));
+    if (!selectedStudents.length) {
+      return { class_id: '', section_id: '', zone: '' };
+    }
+
+    const classValues = selectedStudents.map((user) => user.details?.classes?.id || user.details?.classes?._id || '');
+    const sectionValues = selectedStudents.map((user) => user.details?.sections?.id || user.details?.sections?._id || '');
+    const zoneValues = selectedStudents.map((user) => user.details?.zone || '');
+
+    const getCommonValue = (values) => values.every((value) => value === values[0]) ? values[0] : '';
+
+    const commonClassId = getCommonValue(classValues);
+    const commonSectionId = commonClassId ? getCommonValue(sectionValues) : '';
+    const commonZone = getCommonValue(zoneValues);
+
+    return {
+      class_id: commonClassId,
+      section_id: commonSectionId,
+      zone: commonZone
+    };
   };
 
   const renderRoleDetails = (user) => {
@@ -1039,6 +1096,17 @@ const UserManagement = ({ fixedRole = '' }) => {
                       }}
                     >
                       Assign Class/Section/Zone
+                    </Button>
+                  )}
+                  {!isUnassignedStudentsTab && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setBulkAssignForm(getSelectedAssignmentDefaults());
+                        setShowBulkUpdateAssignmentModal(true);
+                      }}
+                    >
+                      Update Class/Section/Zone
                     </Button>
                   )}
                   <Button
@@ -1823,6 +1891,67 @@ const UserManagement = ({ fixedRole = '' }) => {
             ))}
           </SelectField>
           <p className="text-xs text-slate-500">Only unassigned students can be assigned in bulk.</p>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showBulkUpdateAssignmentModal}
+        onClose={() => setShowBulkUpdateAssignmentModal(false)}
+        title="Update Student Assignment"
+        subtitle="Update class, section, and zone for selected assigned students."
+        maxWidth="max-w-md"
+        footer={
+          <div className="flex gap-3">
+            <Button variant="secondary" className="w-full" onClick={() => setShowBulkUpdateAssignmentModal(false)}>
+              Cancel
+            </Button>
+            <Button className="w-full" onClick={handleBulkUpdateAssignment} disabled={bulkActionLoading}>
+              {bulkActionLoading ? 'Updating...' : 'Update Students'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <SelectField
+            label="Class *"
+            required
+            value={bulkAssignForm.class_id}
+            onChange={(e) => setBulkAssignForm((prev) => ({ ...prev, class_id: e.target.value, section_id: '' }))}
+            disabled={classesLoading || !hasAvailableClasses}
+          >
+            <option value="">{classesLoading ? 'Loading classes...' : 'Select Class'}</option>
+            {classes.map((cls) => (
+              <option key={cls.id} value={cls.id}>
+                {cls.name}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Section"
+            value={bulkAssignForm.section_id}
+            onChange={(e) => setBulkAssignForm((prev) => ({ ...prev, section_id: e.target.value }))}
+            disabled={!bulkAssignForm.class_id}
+          >
+            <option value="">Select Section</option>
+            {bulkSections.map((section) => (
+              <option key={section.id} value={section.id}>
+                {section.name}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Zone"
+            value={bulkAssignForm.zone}
+            onChange={(e) => setBulkAssignForm((prev) => ({ ...prev, zone: e.target.value }))}
+          >
+            <option value="">Select Zone</option>
+            {zones.map((zone) => (
+              <option key={zone.value} value={zone.value}>
+                {zone.label}
+              </option>
+            ))}
+          </SelectField>
+          <p className="text-xs text-slate-500">Only assigned students will be updated in bulk.</p>
         </div>
       </Modal>
 

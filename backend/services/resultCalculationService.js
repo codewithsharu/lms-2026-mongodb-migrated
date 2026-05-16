@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const AssessmentAttempt = require('../models/AssessmentAttempt');
 const HostedAssessment = require('../models/HostedAssessment');
 const AssessmentTemplate = require('../models/AssessmentTemplate');
+const AssessmentScoringService = require('./assessmentScoringService');
 
 /**
  * Calculate detailed results for an assessment attempt
@@ -28,6 +29,7 @@ const calculateAttemptResults = async (attemptId) => {
     const templateData = template.template_data || {};
     const questions = templateData.questions || [];
     const codingSection = hostedAssessment.coding_section;
+    const scoringService = new AssessmentScoringService();
 
     // Initialize section results
     const sectionResults = {
@@ -57,7 +59,7 @@ const calculateAttemptResults = async (attemptId) => {
       const questionMarks = question.marks || 1;
       mcqTotalMarks += questionMarks;
       
-      const userAnswer = answers[`q${index}`];
+      const userAnswer = answers[String(index)] ?? answers[`q${index}`];
       if (userAnswer !== undefined && userAnswer !== null && userAnswer !== '') {
         sectionResults.mcq.attempted++;
         
@@ -74,53 +76,28 @@ const calculateAttemptResults = async (attemptId) => {
 
     // Calculate Coding results
     if (codingSection && codingSection.enabled) {
-      const codingSubmissions = answers['__codingSubmissions'] || {};
-      
-      for (const challengeId of codingSection.challenge_ids) {
-        const submission = codingSubmissions[challengeId] || {};
-        const challengeResult = {
-          challenge_id: challengeId,
-          attempted: false,
-          executed: false,
-          total_test_cases: 0,
-          passed_test_cases: 0,
-          marks_obtained: 0,
-          execution_time: submission.executionTime || 0,
-          last_submission: submission.lastSubmissionTime ? new Date(submission.lastSubmissionTime) : null
-        };
+      const codingSummary = await scoringService.calculateCodingSummary({
+        codingSection,
+        rawAnswers: answers
+      });
 
-        if (submission.code && submission.code.trim()) {
-          challengeResult.attempted = true;
-          sectionResults.coding.attempted++;
-        }
-
-        if (submission.testResults && Array.isArray(submission.testResults)) {
-          challengeResult.executed = true;
-          challengeResult.total_test_cases = submission.testResults.length;
-          
-          const passedTests = submission.testResults.filter(test => test.passed === true);
-          challengeResult.passed_test_cases = passedTests.length;
-          
-          sectionResults.coding.executed++;
-          sectionResults.coding.total_test_cases += submission.testResults.length;
-          sectionResults.coding.passed_test_cases += passedTests.length;
-          
-          // Calculate marks based on test case pass percentage
-          const passPercentage = submission.testResults.length > 0 
-            ? (passedTests.length / submission.testResults.length) * 100 
-            : 0;
-          
-          const challengeMarks = calculateCodingChallengeMarks(passPercentage, questionMarks);
-          challengeResult.marks_obtained = challengeMarks;
-          sectionResults.coding.marks_obtained += challengeMarks;
-        }
-
-        sectionResults.coding.challenges.push(challengeResult);
-      }
-      
-      // Calculate total coding marks (equal distribution or based on challenge config)
-      const codingTotalMarks = calculateTotalCodingMarks(codingSection, questions.length);
-      sectionResults.coding.total_marks = codingTotalMarks;
+      sectionResults.coding.attempted = codingSummary.attemptedQuestionCount;
+      sectionResults.coding.executed = codingSummary.attemptedQuestionCount;
+      sectionResults.coding.total_test_cases = codingSummary.totalQuestionCount;
+      sectionResults.coding.passed_test_cases = codingSummary.passedQuestionCount;
+      sectionResults.coding.total = codingSummary.totalQuestionCount;
+      sectionResults.coding.marks_obtained = codingSummary.score;
+      sectionResults.coding.total_marks = codingSummary.totalMarks;
+      sectionResults.coding.challenges = Object.entries(codingSummary.challengeBreakdown || {}).map(([challengeId, details]) => ({
+        challenge_id: challengeId,
+        attempted: (details.attemptedQuestionCount || 0) > 0,
+        executed: (details.passedQuestionCount || 0) > 0,
+        total_test_cases: details.totalQuestionCount || 0,
+        passed_test_cases: details.passedQuestionCount || 0,
+        marks_obtained: details.score || 0,
+        execution_time: details.executionTime || 0,
+        last_submission: details.lastSubmissionTime ? new Date(details.lastSubmissionTime) : null
+      }));
     }
 
     // Calculate overall results

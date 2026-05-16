@@ -5,7 +5,7 @@ import { getRoleBadgeClass } from '../utils/uiTheme';
 import { 
   FiHome, FiUsers, FiSettings, FiLogOut, FiMenu, FiX,
   FiBook, FiClipboard, FiBarChart2, FiUser, FiChevronRight, FiChevronLeft, FiActivity, FiDatabase, FiTerminal, FiMonitor,
-  FiBookOpen, FiBriefcase
+  FiBookOpen, FiBriefcase, FiLayers
 } from 'react-icons/fi';
 
 // GitHub-style avatar colors
@@ -77,6 +77,7 @@ const Layout = ({ children }) => {
       teacher: [
         { name: 'Dashboard', path: '/teacher', icon: FiHome },
         { name: 'My Classes', path: '/teacher/classes', icon: FiBook },
+        { name: 'Central Repo', path: '/teacher/central-repo', icon: FiLayers },
         { name: 'Question Bank', path: '/teacher/assessments/templates', icon: FiClipboard },
         { name: 'Challenges', path: '/teacher/compiler/challenges', icon: FiTerminal },
         { name: 'Schedule Exams', path: '/teacher/assessments/host', icon: FiActivity },

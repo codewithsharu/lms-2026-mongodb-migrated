@@ -14,6 +14,7 @@ const AssessmentTemplates = () => {
   const [setupRequired, setSetupRequired] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deletingTemplateId, setDeletingTemplateId] = useState(null);
+  const [updatingTemplateId, setUpdatingTemplateId] = useState(null);
   const [previewTemplate, setPreviewTemplate] = useState(null);
 
   const getTemplateQuestions = (template) => {
@@ -43,6 +44,21 @@ const AssessmentTemplates = () => {
   useEffect(() => {
     fetchTemplates();
   }, []);
+
+  const handleToggleVisibility = async (template) => {
+    if (!template?.id) return;
+
+    try {
+      setUpdatingTemplateId(template.id);
+      await assessmentAPI.updateTemplate(template.id, { is_public: !template.is_public });
+      toast.success(template.is_public ? 'Removed from Central Repo' : 'Published to Central Repo');
+      fetchTemplates();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update visibility');
+    } finally {
+      setUpdatingTemplateId(null);
+    }
+  };
 
   const handleDeleteTemplate = async (template) => {
     if (!template?.id) return;
@@ -101,7 +117,9 @@ const AssessmentTemplates = () => {
                     <tr>
                       <th>Template ID</th>
                       <th>Name</th>
+                      <th>Author</th>
                       <th>Questions</th>
+                      <th>Central Repo</th>
                       <th>Updated</th>
                       <th className="text-right">Actions</th>
                     </tr>
@@ -113,7 +131,18 @@ const AssessmentTemplates = () => {
                         <td>
                           <p className="font-medium text-slate-800">{template.title || 'Untitled MCQ Template'}</p>
                         </td>
+                        <td>{template.author_name || '—'}</td>
                         <td>{template.question_count}</td>
+                        <td>
+                          <Button
+                            variant="secondary"
+                            className="h-9! px-3! border-slate-200!"
+                            onClick={() => handleToggleVisibility(template)}
+                            disabled={updatingTemplateId === template.id}
+                          >
+                            {template.is_public ? 'Unpublish' : 'Publish'}
+                          </Button>
+                        </td>
                         <td>{template.updated_at ? new Date(template.updated_at).toLocaleString() : '—'}</td>
                         <td>
                           <div className="flex justify-end gap-2">

@@ -117,7 +117,7 @@ const TeacherClasses = () => {
 
   const handleManage = (card, idx) => {
     const sectionParam = card.sectionId || 'all';
-    navigate(`/teacher/${card.classId}/${sectionParam}/students`, {
+    navigate(`/teacher/classes/${card.classId}/${sectionParam}/students`, {
       state: { className: card.className, sectionName: card.sectionName },
     });
   };

@@ -111,6 +111,35 @@ const normalizeQuestionList = (templateData) => {
     return { type: 'mcq', question, options, answerMode: item?.answerMode === 'multiple' || correctOptions.length > 1 ? 'multiple' : 'single', correctOptions, marks: normalizePositiveMarks(item?.marks ?? item?.score ?? item?.points, 1) };
   }).filter(Boolean);
 };
+
+const toTemplateAuthor = (template) => {
+  const author = template?.original_author_id;
+  if (author && typeof author === 'object') {
+    return {
+      id: author._id?.toString() || author.id || null,
+      full_name: author.full_name || null
+    };
+  }
+  const owner = template?.teacher_id;
+  if (owner && typeof owner === 'object') {
+    return {
+      id: owner._id?.toString() || owner.id || null,
+      full_name: owner.full_name || null
+    };
+  }
+  return null;
+};
+
+const formatTemplateResponse = (template, authorFallback = null) => {
+  const author = toTemplateAuthor(template) || authorFallback;
+  return {
+    ...template,
+    id: template._id,
+    author_id: author?.id || null,
+    author_name: author?.full_name || null,
+    is_public: Boolean(template.is_public)
+  };
+};
 const sanitizeQuestionsForStudent = (questions) => questions.map((q, i) => ({ index: i, type: q.type, question: q.question, answerMode: q.answerMode || 'single', options: q.type === 'mcq' ? q.options : [] }));
 const isWithinAttemptWindow = (exam) => { 
   const now = new Date(); 
@@ -148,8 +177,8 @@ const getRemainingSeconds = (attempt, exam) => {
   
   return Math.max(0, durationBasedRemaining); 
 };
-const normalizeSubmittedAnswer = (q, raw) => { if (q.type === 'blank') return String(raw || '').trim(); if (q.answerMode === 'multiple') { if (!Array.isArray(raw)) return []; return [...new Set(raw.map(v => Number(v)).filter(v => Number.isInteger(v) && v >= 0 && v <= 3))].sort((a, b) => a - b); } const s = Number(raw); return Number.isInteger(s) && s >= 0 && s <= 3 ? s : null; };
-const isAnswerCorrect = (q, a) => { if (q.type === 'blank') return String(a || '').toLowerCase() === String(q.blankAnswer || '').trim().toLowerCase(); if (q.answerMode === 'multiple') { if (!Array.isArray(a)) return false; if (a.length !== q.correctOptions.length) return false; return a.every((v, i) => v === q.correctOptions[i]); } return Number(a) === Number(q.correctOptions[0]); };
+const normalizeSubmittedAnswer = (q, raw) => { if (q.type === 'blank') return String(raw || '').trim(); if (q.answerMode === 'multiple') { if (!Array.isArray(raw)) return []; return [...new Set(raw.map(v => Number(v)).filter(v => Number.isInteger(v) && v >= 0 && v <= 3))].sort((a, b) => a - b); } if (raw === null || raw === undefined || raw === '') return null; const s = Number(raw); return Number.isInteger(s) && s >= 0 && s <= 3 ? s : null; };
+const isAnswerCorrect = (q, a) => { if (q.type === 'blank') return String(a || '').toLowerCase() === String(q.blankAnswer || '').trim().toLowerCase(); if (q.answerMode === 'multiple') { if (!Array.isArray(a)) return false; if (a.length !== q.correctOptions.length) return false; return a.every((v, i) => v === q.correctOptions[i]); } if (!Number.isInteger(a)) return false; return Number(a) === Number(q.correctOptions[0]); };
 const getCodingSubmissionMap = (answers) => { if (!answers || typeof answers !== 'object') return {}; const s = answers[CODING_SUBMISSIONS_META_KEY]; if (!s || typeof s !== 'object' || Array.isArray(s)) return {}; return Object.entries(s).reduce((acc, [k, v]) => { const nk = String(k || '').trim(); if (nk && v && typeof v === 'object' && !Array.isArray(v)) acc[nk] = v; return acc; }, {}); };
 const normalizeChallengeProblemList = (p) => { if (!p || typeof p !== 'object') return []; if (Array.isArray(p.problems)) return p.problems; if (Array.isArray(p.challenge?.problems)) return p.challenge.problems; return []; };
 const extractChallengeScoreProfile = (p) => { const problems = normalizeChallengeProblemList(p); const qs = problems.map(pr => normalizePositiveMarks(pr?.properties?.score ?? pr?.score ?? pr?.points, 1)); return { questionScores: qs, totalPossibleScore: sumScoreList(qs), questionCount: qs.length }; };
@@ -158,9 +187,53 @@ const fetchChallengeScoreProfile = async (challengeId, apiKey) => { if (!challen
 const calculateCodingChallengeSummary = (submission, fallbackProfile) => {
   const ss = submission && typeof submission === 'object' && !Array.isArray(submission) ? submission : {};
   const questionScores = normalizeQuestionScoreList(ss.questionScores);
-  const testResults = ss.testResults || [];
+  const fallbackScores = normalizeQuestionScoreList(fallbackProfile?.questionScores);
+  const resolvedScores = questionScores.length > 0 ? questionScores : fallbackScores;
+  const testResults = Array.isArray(ss.testResults) ? ss.testResults : [];
   const passedTestCount = testResults.filter(t => t.passed === true).length;
   const totalTestCount = testResults.length;
+  const testPassedIndexes = testResults
+    .map((test, index) => (test && test.passed === true ? index : -1))
+    .filter((index) => index >= 0);
+  let passedIndexes = normalizeIndexList(ss.passedQuestionIndexes);
+  if (testPassedIndexes.length > 0) {
+    passedIndexes = normalizeIndexList([...passedIndexes, ...testPassedIndexes]);
+  }
+  const passedCountRaw = Math.max(
+    passedIndexes.length,
+    safeInt(ss.passedQuestionCount, 0),
+    passedTestCount
+  );
+  if (passedIndexes.length === 0 && passedCountRaw > 0 && resolvedScores.length > 0) {
+    passedIndexes = Array.from({ length: Math.min(passedCountRaw, resolvedScores.length) }, (_, index) => index);
+  }
+  const totalQuestionCount = Math.max(
+    safeInt(ss.totalQuestionCount ?? ss.totalQuestions ?? fallbackProfile?.questionCount, 0),
+    resolvedScores.length,
+    totalTestCount
+  );
+  let passedQuestionCount = passedCountRaw;
+  if (totalQuestionCount > 0) {
+    passedQuestionCount = Math.min(totalQuestionCount, passedQuestionCount);
+  }
+  const allPassed = parseBooleanInput(ss.allTestCasesPassed, false)
+    || (totalQuestionCount > 0 && passedQuestionCount >= totalQuestionCount);
+  let totalPossibleScore = safeNumber(ss.totalPossibleScore, 0);
+  if (totalPossibleScore <= 0) {
+    totalPossibleScore = safeNumber(fallbackProfile?.totalPossibleScore, 0);
+  }
+  if (totalPossibleScore <= 0) {
+    totalPossibleScore = sumScoreList(resolvedScores);
+  }
+  let score = 0;
+  if (resolvedScores.length > 0 && passedIndexes.length > 0) {
+    score = roundToTwo(passedIndexes.reduce((sum, index) => sum + safeNumber(resolvedScores[index], 0), 0));
+  } else if (allPassed && totalPossibleScore > 0) {
+    score = roundToTwo(totalPossibleScore);
+  }
+  if (totalPossibleScore > 0) {
+    score = Math.min(score, totalPossibleScore);
+  }
   
   // Enhanced test case tracking
   const testCaseDetails = testResults.map((test, index) => ({
@@ -175,28 +248,20 @@ const calculateCodingChallengeSummary = (submission, fallbackProfile) => {
   }));
   
   return {
-    questionScores,
+    questionScores: resolvedScores,
     testResults,
     testCaseDetails,
     passedTestCount,
     totalTestCount,
-    totalPossibleScore: sumScoreList(fallbackProfile?.questionScores || questionScores),
-    passedQuestionCount: questionScores.filter((score, idx) => {
-      const testResult = testResults[idx];
-      return testResult && testResult.passed === true;
-    }).length,
-    totalQuestionCount: questionScores.length,
+    score: roundToTwo(score),
+    totalPossibleScore: roundToTwo(totalPossibleScore),
+    passedQuestionCount,
+    totalQuestionCount,
+    allTestCasesPassed: allPassed,
     executionTime: ss.executionTime || 0,
     memoryUsage: ss.memoryUsage || 0,
     lastSubmissionTime: ss.lastSubmissionTime || null
   };
-  let pqc = Math.max(pqi.length, hPC); if (allPassed && tqc > 0) pqc = tqc; if (tqc > 0) pqc = Math.min(tqc, pqc);
-  const atp = tqc > 0 ? (allPassed || pqc >= tqc) : allPassed;
-  let score = 0;
-  if (rqs.length > 0 && pqi.length > 0) score = roundToTwo(pqi.reduce((sum, i) => sum + safeNumber(rqs[i], 0), 0));
-  else if (atp && tps > 0) score = tps;
-  if (tps <= 0 && rqs.length > 0) tps = sumScoreList(rqs); if (tps <= 0 && score > 0) tps = score; if (tps > 0) score = Math.min(score, tps);
-  return { score: roundToTwo(score), totalPossibleScore: roundToTwo(tps), passedQuestionCount: pqc, totalQuestionCount: tqc, allTestCasesPassed: atp, questionScores: rqs };
 };
 
 const calculateCodingSummary = async ({ codingSection, rawAnswers }) => {
@@ -320,16 +385,49 @@ router.post('/templates', verifyToken, hasRole('teacher'), async (req, res) => {
   try {
     const { title, subject, description, question_count = 0, total_marks = 100, passing_percentage = 40, template_data = {} } = req.body;
     if (!title || !subject) return res.status(400).json({ error: 'Title and subject are required' });
-    const data = await AssessmentTemplate.create({ teacher_id: req.user.id, title: String(title).trim(), subject: String(subject).trim(), description: description ? String(description).trim() : null, question_count: safeInt(question_count, 0), total_marks: safeInt(total_marks, 100), passing_percentage: safeInt(passing_percentage, 40), template_data, is_active: true });
-    res.status(201).json({ message: 'Template created successfully', template: { ...data.toObject(), id: data._id } });
+    const data = await AssessmentTemplate.create({
+      teacher_id: req.user.id,
+      original_author_id: req.user.id,
+      title: String(title).trim(),
+      subject: String(subject).trim(),
+      description: description ? String(description).trim() : null,
+      question_count: safeInt(question_count, 0),
+      total_marks: safeInt(total_marks, 100),
+      passing_percentage: safeInt(passing_percentage, 40),
+      template_data,
+      is_public: parseBooleanInput(req.body?.is_public, false),
+      is_active: true
+    });
+    res.status(201).json({
+      message: 'Template created successfully',
+      template: formatTemplateResponse(data.toObject(), { id: req.user.id, full_name: req.user.full_name })
+    });
   } catch (error) { console.error('Create template error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to create template') }); }
 });
 
 router.get('/templates', verifyToken, hasRole('teacher'), async (req, res) => {
   try {
-    const data = await AssessmentTemplate.find({ teacher_id: req.user.id, is_active: true }).sort({ created_at: -1 }).lean();
-    res.json({ templates: (data || []).map(t => ({ ...t, id: t._id })) });
+    const data = await AssessmentTemplate.find({ teacher_id: req.user.id, is_active: true })
+      .populate('original_author_id', 'full_name')
+      .populate('teacher_id', 'full_name')
+      .sort({ created_at: -1 })
+      .lean();
+    res.json({ templates: (data || []).map((t) => formatTemplateResponse(t)) });
   } catch (error) { console.error('List templates error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch templates') }); }
+});
+
+router.get('/templates/central', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
+  try {
+    const data = await AssessmentTemplate.find({ is_public: true, is_active: true })
+      .populate('original_author_id', 'full_name')
+      .populate('teacher_id', 'full_name')
+      .sort({ updated_at: -1 })
+      .lean();
+    res.json({ templates: (data || []).map((t) => formatTemplateResponse(t)) });
+  } catch (error) {
+    console.error('List central templates error:', error);
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch central templates') });
+  }
 });
 
 router.put('/templates/:id', verifyToken, hasRole('teacher'), async (req, res) => {
@@ -343,10 +441,58 @@ router.put('/templates/:id', verifyToken, hasRole('teacher'), async (req, res) =
     if (total_marks !== undefined) ud.total_marks = safeInt(total_marks, 100);
     if (passing_percentage !== undefined) ud.passing_percentage = safeInt(passing_percentage, 40);
     if (template_data !== undefined) ud.template_data = template_data;
-    const data = await AssessmentTemplate.findOneAndUpdate({ _id: req.params.id, teacher_id: req.user.id }, ud, { new: true }).lean();
+    if (req.body?.is_public !== undefined) ud.is_public = parseBooleanInput(req.body.is_public, false);
+    const data = await AssessmentTemplate.findOneAndUpdate(
+      { _id: req.params.id, teacher_id: req.user.id },
+      ud,
+      { new: true }
+    ).populate('original_author_id', 'full_name');
     if (!data) return res.status(404).json({ error: 'Template not found for this teacher' });
-    res.json({ message: 'Template updated successfully', template: { ...data, id: data._id } });
+    res.json({ message: 'Template updated successfully', template: formatTemplateResponse(data) });
   } catch (error) { console.error('Update template error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to update template') }); }
+});
+
+router.post('/templates/:id/clone', verifyToken, hasRole('teacher'), async (req, res) => {
+  try {
+    const template = await AssessmentTemplate.findOne({ _id: req.params.id, is_active: true }).lean();
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+
+    const isOwner = template.teacher_id?.toString() === req.user.id;
+    if (!template.is_public && !isOwner) return res.status(403).json({ error: 'Template is not available for cloning' });
+
+    const sourceAuthorId = req.user.id;
+    const existingCloneCount = await AssessmentTemplate.countDocuments({
+      teacher_id: req.user.id,
+      source_template_id: template._id,
+      is_active: true
+    });
+    const cloneIndex = existingCloneCount + 1;
+    const cloneTitle = `${String(template.title || 'Untitled MCQ Template').trim()} (clone-${cloneIndex})`;
+
+    const data = await AssessmentTemplate.create({
+      teacher_id: req.user.id,
+      original_author_id: sourceAuthorId,
+      source_template_id: template._id,
+      title: cloneTitle,
+      subject: template.subject,
+      description: template.description,
+      question_count: template.question_count,
+      total_marks: template.total_marks,
+      passing_percentage: template.passing_percentage,
+      template_data: template.template_data,
+      is_public: false,
+      is_active: true
+    });
+
+    const authorUser = await User.findById(sourceAuthorId).select('_id full_name').lean();
+    res.status(201).json({
+      message: 'Template cloned successfully',
+      template: formatTemplateResponse(data.toObject(), authorUser ? { id: authorUser._id, full_name: authorUser.full_name } : null)
+    });
+  } catch (error) {
+    console.error('Clone template error:', error);
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to clone template') });
+  }
 });
 
 router.delete('/templates/:id', verifyToken, hasRole('teacher'), async (req, res) => {
@@ -1189,6 +1335,10 @@ router.get('/student/results', verifyToken, hasRole('student'), async (req, res)
     }
     const attemptsByExam = attempts.reduce((acc, a) => { const k = a.hosted_assessment_id?.toString(); if (!acc[k]) acc[k] = []; acc[k].push({ ...a, id: a._id }); return acc; }, {});
     const now = new Date();
+    const historyLimitRaw = req.query.history_limit;
+    const historyLimitValue = historyLimitRaw === undefined || historyLimitRaw === null || String(historyLimitRaw).trim() === ''
+      ? null
+      : safeInt(historyLimitRaw, 0);
     const results = await Promise.all(scopedExams.map(async (exam) => {
       const template = await AssessmentTemplate.findById(exam.template_id).select('_id title subject question_count total_marks passing_percentage').lean();
       const examAttempts = attemptsByExam[exam._id.toString()] || [];
@@ -1196,6 +1346,9 @@ router.get('/student/results', verifyToken, hasRole('student'), async (req, res)
       const latestAttempt = submittedAttempts[0] || null;
       const bestAttempt = submittedAttempts.reduce((best, curr) => !best ? curr : (safeNumber(curr.score, 0) > safeNumber(best.score, 0) ? curr : best), null);
       const visible = exam.result_mode === 'immediate' || (exam.result_mode === 'after_end' && exam.end_time && now >= new Date(exam.end_time));
+      const attemptHistory = historyLimitValue && historyLimitValue > 0
+        ? submittedAttempts.slice(0, historyLimitValue)
+        : submittedAttempts;
       
       // Add detailed section breakdown for visible results
       let detailedResults = null;
@@ -1232,6 +1385,7 @@ router.get('/student/results', verifyToken, hasRole('student'), async (req, res)
         attemptsUsed: examAttempts.length, 
         latestAttempt, 
         bestAttempt, 
+        attemptHistory,
         resultVisible: visible,
         detailedResults
       };

@@ -36,6 +36,7 @@ const normalizeSubmittedAnswer = (q, raw) => {
     if (!Array.isArray(raw)) return [];
     return [...new Set(raw.map(v => Number(v)).filter(v => Number.isInteger(v) && v >= 0 && v <= 3))].sort((a, b) => a - b);
   }
+  if (raw === null || raw === undefined || raw === '') return null;
   const s = Number(raw);
   return Number.isInteger(s) && s >= 0 && s <= 3 ? s : null;
 };
@@ -47,6 +48,7 @@ const isAnswerCorrect = (q, a) => {
     if (a.length !== q.correctOptions.length) return false;
     return a.every((v, i) => v === q.correctOptions[i]);
   }
+  if (!Number.isInteger(a)) return false;
   return Number(a) === Number(q.correctOptions[0]);
 };
 
@@ -107,9 +109,9 @@ class AssessmentScoringService {
     return { 
       score: roundToTwo(entries.reduce((s, [, v]) => s + safeNumber(v?.score, 0), 0)), 
       totalMarks: roundToTwo(entries.reduce((s, [, v]) => s + safeNumber(v?.totalPossibleScore, 0), 0)), 
-      passedQuestionCount: entries.reduce((s, [, v]) => s + safeInt(v?.passedQuestionCount, 0), 0), 
-      totalQuestionCount: entries.reduce((s, [, v]) => s + safeInt(v?.totalQuestionCount, 0), 0), 
-      attemptedQuestionCount: entries.reduce((s, [, v]) => s + safeInt(v?.attemptedQuestionCount, 0), 0),
+      passedQuestionCount: entries.reduce((s, [, v]) => s + this.safeInt(v?.passedQuestionCount, 0), 0), 
+      totalQuestionCount: entries.reduce((s, [, v]) => s + this.safeInt(v?.totalQuestionCount, 0), 0), 
+      attemptedQuestionCount: entries.reduce((s, [, v]) => s + this.safeInt(v?.attemptedQuestionCount, 0), 0),
       challengeBreakdown: bd 
     };
   }
@@ -120,9 +122,47 @@ class AssessmentScoringService {
   calculateCodingChallengeSummary(submission) {
     const ss = submission && typeof submission === 'object' && !Array.isArray(submission) ? submission : {};
     const questionScores = this.normalizeQuestionScores(ss.questionScores);
-    const testResults = ss.testResults || [];
+    const testResults = Array.isArray(ss.testResults) ? ss.testResults : [];
     const passedTestCount = testResults.filter(t => t.passed === true).length;
     const totalTestCount = testResults.length;
+    const testPassedIndexes = testResults
+      .map((test, index) => (test && test.passed === true ? index : -1))
+      .filter((index) => index >= 0);
+    let passedIndexes = this.normalizeAttemptedQuestionIndexes(ss.passedQuestionIndexes);
+    if (testPassedIndexes.length > 0) {
+      passedIndexes = this.normalizeAttemptedQuestionIndexes([...passedIndexes, ...testPassedIndexes]);
+    }
+    const passedCountRaw = Math.max(
+      passedIndexes.length,
+      this.safeInt(ss.passedQuestionCount, 0),
+      passedTestCount
+    );
+    if (passedIndexes.length === 0 && passedCountRaw > 0 && questionScores.length > 0) {
+      passedIndexes = Array.from({ length: Math.min(passedCountRaw, questionScores.length) }, (_, index) => index);
+    }
+    const totalQuestionCount = Math.max(
+      this.safeInt(ss.totalQuestionCount ?? ss.totalQuestions, 0),
+      questionScores.length,
+      totalTestCount
+    );
+    let passedQuestionCount = passedCountRaw;
+    if (totalQuestionCount > 0) {
+      passedQuestionCount = Math.min(totalQuestionCount, passedQuestionCount);
+    }
+    const allPassed = Boolean(ss.allTestCasesPassed) || (totalQuestionCount > 0 && passedQuestionCount >= totalQuestionCount);
+    let totalPossibleScore = safeNumber(ss.totalPossibleScore, 0);
+    if (totalPossibleScore <= 0) {
+      totalPossibleScore = sumScoreList(questionScores);
+    }
+    let score = 0;
+    if (questionScores.length > 0 && passedIndexes.length > 0) {
+      score = roundToTwo(passedIndexes.reduce((sum, index) => sum + safeNumber(questionScores[index], 0), 0));
+    } else if (allPassed && totalPossibleScore > 0) {
+      score = roundToTwo(totalPossibleScore);
+    }
+    if (totalPossibleScore > 0) {
+      score = Math.min(score, totalPossibleScore);
+    }
     
     // Enhanced test case tracking
     const testCaseDetails = testResults.map((test, index) => ({
@@ -142,12 +182,11 @@ class AssessmentScoringService {
       testCaseDetails,
       passedTestCount,
       totalTestCount,
-      totalPossibleScore: sumScoreList(questionScores),
-      passedQuestionCount: questionScores.filter((score, idx) => {
-        const testResult = testResults[idx];
-        return testResult && testResult.passed === true;
-      }).length,
-      totalQuestionCount: questionScores.length,
+      score: roundToTwo(score),
+      totalPossibleScore: roundToTwo(totalPossibleScore),
+      passedQuestionCount,
+      totalQuestionCount,
+      allTestCasesPassed: allPassed,
       attemptedQuestionCount: this.getCodingSubmissionAttemptedCount(submission),
       executionTime: ss.executionTime || 0,
       memoryUsage: ss.memoryUsage || 0,

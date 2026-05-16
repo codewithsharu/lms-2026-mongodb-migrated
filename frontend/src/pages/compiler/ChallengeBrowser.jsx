@@ -20,13 +20,15 @@ const ChallengeBrowser = () => {
   const [challenges, setChallenges] = useState([]);
   const [deletingChallengeIds, setDeletingChallengeIds] = useState([]);
   const [pendingDeleteChallenge, setPendingDeleteChallenge] = useState(null);
+  const [updatingVisibilityId, setUpdatingVisibilityId] = useState(null);
 
   const fetchChallenges = async (queryText = '') => {
     try {
       setLoading(true);
       setError('');
 
-      const response = await compilerAPI.listChallenges({
+      const listFn = isPortalMode ? compilerAPI.listTeacherChallenges : compilerAPI.listChallenges;
+      const response = await listFn({
         q: queryText || undefined,
         limit: 100
       });
@@ -92,6 +94,24 @@ const ChallengeBrowser = () => {
     }
   };
 
+  const handleToggleVisibility = async (challenge) => {
+    if (!challenge?.id) return;
+
+    try {
+      setUpdatingVisibilityId(challenge.id);
+      await compilerAPI.updateChallengeVisibility(challenge.id, !challenge.is_public);
+      setChallenges((prev) => prev.map((entry) => (
+        entry.id === challenge.id ? { ...entry, is_public: !challenge.is_public } : entry
+      )));
+      toast.success(challenge.is_public ? 'Removed from Central Repo' : 'Published to Central Repo');
+    } catch (visibilityError) {
+      const message = visibilityError.response?.data?.error || 'Failed to update visibility';
+      toast.error(message);
+    } finally {
+      setUpdatingVisibilityId(null);
+    }
+  };
+
   const challengeCountLabel = useMemo(() => {
     const count = challenges.length;
     if (count === 1) return '1 challenge';
@@ -121,8 +141,8 @@ const ChallengeBrowser = () => {
       {isPortalMode ? (
         <div className="page-header mb-3 flex flex-col gap-4 lg:mb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1>Challenge Browser</h1>
-            <p>View, edit, and run all API-owned challenges in one place.</p>
+            <h1>My Challenges</h1>
+            <p>Manage your coding challenges and publish them to Central Repo.</p>
           </div>
           {headerActions}
         </div>
@@ -195,6 +215,9 @@ const ChallengeBrowser = () => {
                         <div>
                           <h3 className="text-base font-semibold text-slate-800">{item.title || 'Untitled Challenge'}</h3>
                           <p className="mt-1 text-xs text-slate-500">ID: {challengeId}</p>
+                          {isPortalMode && (
+                            <p className="mt-1 text-xs text-slate-500">Author: {item.author_name || '—'}</p>
+                          )}
                           <div className="mt-2 flex flex-wrap gap-2">
                             {(item.tags || []).length > 0 ? (
                               item.tags.map((tag) => (
@@ -207,6 +230,15 @@ const ChallengeBrowser = () => {
                         </div>
 
                         <div className="flex flex-wrap gap-2">
+                          {isPortalMode && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => handleToggleVisibility(item)}
+                              disabled={updatingVisibilityId === challengeId}
+                            >
+                              {item.is_public ? 'Unpublish' : 'Publish'}
+                            </Button>
+                          )}
                           <Link to={runPath} className="btn btn-primary">
                             <FiPlayCircle className="h-4 w-4" />
                             View Challenge

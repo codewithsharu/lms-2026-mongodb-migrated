@@ -33,13 +33,30 @@ class ProfileManagementService {
         throw new Error('Student details not found');
       }
 
-      // Get teacher assignments for this student's class/section
+      // Get teacher assignments scoped to this student's class/section/zone
+      const sectionOr = [
+        { section_id: null },
+        { section_id: { $exists: false } }
+      ];
+      if (studentDetail.section_id) {
+        sectionOr.push({ section_id: studentDetail.section_id });
+      }
+
+      const zoneOr = [
+        { zone: null },
+        { zone: { $exists: false } }
+      ];
+      if (studentDetail.zone) {
+        zoneOr.push({ zone: studentDetail.zone });
+      }
+
       const teacherAssignments = await TeacherAssignment.find({
-        $or: [
-          { class_id: studentDetail.class_id },
-          { section_id: studentDetail.section_id }
+        class_id: studentDetail.class_id,
+        $and: [
+          { $or: sectionOr },
+          { $or: zoneOr }
         ]
-      }).populate('teacher_id', 'full_name email');
+      }).populate('teacher_id', 'full_name email').populate('section_id', 'name');
 
       // Get assigned teachers
       const assignedTeachers = teacherAssignments.map(assignment => ({
@@ -48,7 +65,7 @@ class ProfileManagementService {
         email: assignment.teacher_id.email,
         assignment_type: assignment.section_id ? 'section' : 'class',
         class_name: studentDetail.class_id?.name,
-        section_name: studentDetail.section_id?.name,
+        section_name: assignment.section_id?.name || null,
         zone: assignment.zone
       }));
 

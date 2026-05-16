@@ -49,6 +49,7 @@ import TeacherExamPreviewLab from './pages/teacher/ExamPreviewLab';
 import TeacherChallengeBrowser from './pages/teacher/ChallengeBrowser';
 import TeacherChallengeBuilder from './pages/teacher/ChallengeBuilder';
 import TeacherChallengeRunner from './pages/teacher/ChallengeRunner';
+import TeacherCentralRepo from './pages/teacher/CentralRepo';
 import TeacherAnalytics from './pages/teacher/Analytics';
 import TeacherProfile from './pages/teacher/Profile';
 import ExamMonitoring from './pages/teacher/ExamMonitoring';
@@ -218,8 +219,16 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route
+            path="/teacher/central-repo"
+            element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherCentralRepo />
+              </ProtectedRoute>
+            }
+          />
           <Route 
-            path="/teacher/:classId/:sectionId/students" 
+            path="/teacher/classes/:classId/:sectionId/students" 
             element={
               <ProtectedRoute allowedRoles={['teacher']}>
                 <TeacherClassStudents />

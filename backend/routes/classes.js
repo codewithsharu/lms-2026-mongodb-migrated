@@ -402,23 +402,16 @@ router.get('/:classId/students', verifyToken, async (req, res) => {
   try {
     const { classId } = req.params;
     
-    // Support section filtering
-    let sectionFilter = {};
+    const filters = { class_id: classId };
     if (req.query.section_id) {
-      sectionFilter.section_id = req.query.section_id;
+      filters.section_id = req.query.section_id;
     }
-    
-    // Support zone filtering
     if (req.query.zone) {
-      sectionFilter.zone = req.query.zone;
+      filters.zone = req.query.zone;
     }
-    
+
     // Get students with filters
-    const students = await StudentDetail.find({ 
-      class_id: classId,
-      ...sectionFilter,
-      ...Object.keys(sectionFilter).length > 0 ? { section_id: { $exists: true } } : {}
-    }).sort({ full_name: 1 }).lean();
+    const students = await StudentDetail.find(filters).sort({ full_name: 1 }).lean();
     
     // Populate user details
     const userIds = [...new Set(students.map(s => s.user_id?.toString()).filter(Boolean))];

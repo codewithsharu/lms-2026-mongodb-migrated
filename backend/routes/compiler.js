@@ -1,4 +1,6 @@
 const express = require('express');
+const ChallengeOwnership = require('../models/ChallengeOwnership');
+const { verifyToken, hasRole } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -69,6 +71,18 @@ const toChallengeList = (payload) => {
   return [];
 };
 
+const parseBooleanInput = (value, fallback = false) => {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') return true;
+    if (normalized === 'false' || normalized === '0') return false;
+  }
+  return fallback;
+};
+
 const normalizeChallengeSummary = (row) => {
   const tags = Array.isArray(row?.tags)
     ? row.tags.map((tag) => String(tag || '').trim()).filter(Boolean)
@@ -80,6 +94,53 @@ const normalizeChallengeSummary = (row) => {
     slug: String(row?.link || row?.slug || '').trim() || null,
     tags,
     raw: row
+  };
+};
+
+const normalizeChallengeListFilters = (challengeIds = []) => ({
+  type: 'listAllChallengeIds',
+  filters: {
+    challengeIds,
+    userIds: []
+  }
+});
+
+const listChallengesByIds = async ({ apiKey, challengeIds = [], searchText = '', limit = 50 }) => {
+  if (!challengeIds.length) {
+    return { total: 0, challenges: [] };
+  }
+
+  const reportPayload = normalizeChallengeListFilters(challengeIds);
+  const upstream = await callOneCompiler({
+    url: `${ONECOMPILER_API_BASE}/v1/reports?access_token=${encodeURIComponent(apiKey)}`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reportPayload)
+  });
+
+  if (!upstream.ok) {
+    return { error: upstream, challenges: [] };
+  }
+
+  const allChallenges = toChallengeList(upstream.payload)
+    .map(normalizeChallengeSummary)
+    .filter((item) => item.id);
+
+  const allowedIds = new Set(challengeIds.map((id) => String(id)));
+  const scopedChallenges = allChallenges.filter((item) => allowedIds.has(item.id));
+
+  const normalizedSearch = String(searchText || '').trim().toLowerCase();
+  const filteredChallenges = normalizedSearch
+    ? scopedChallenges.filter((item) => (
+      item.title.toLowerCase().includes(normalizedSearch)
+      || item.id.toLowerCase().includes(normalizedSearch)
+      || item.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch))
+    ))
+    : scopedChallenges;
+
+  return {
+    total: scopedChallenges.length,
+    challenges: filteredChallenges.slice(0, limit)
   };
 };
 
@@ -127,6 +188,38 @@ const isProblemEffectivelyBlank = (problem) => {
   const hasValidations = validations.length > 0;
 
   return !hasId && !hasTitle && !hasMarkdown && !hasValidations;
+};
+
+const extractChallengeId = (payload) => firstNonEmptyString([
+  payload?.challengeId,
+  payload?.challenge_id,
+  payload?.id,
+  payload?._id,
+  payload?.doc?.challengeId,
+  payload?.doc?.id,
+  payload?.doc?._id,
+  payload?.data?.challengeId,
+  payload?.data?.id,
+  payload?.data?._id,
+  payload?.challenge?.challengeId,
+  payload?.challenge?.id,
+  payload?.challenge?._id
+]);
+
+const extractChallengePayload = (payload) => {
+  if (payload && typeof payload === 'object') {
+    if (payload.challenge && Array.isArray(payload.problems)) {
+      return { challenge: payload.challenge, problems: payload.problems };
+    }
+    if (payload.data?.challenge && Array.isArray(payload.data?.problems)) {
+      return { challenge: payload.data.challenge, problems: payload.data.problems };
+    }
+    if (payload.doc?.challenge && Array.isArray(payload.doc?.problems)) {
+      return { challenge: payload.doc.challenge, problems: payload.doc.problems };
+    }
+  }
+
+  return null;
 };
 
 const callOneCompiler = async ({ url, method = 'GET', headers = {}, body }) => {
@@ -275,7 +368,7 @@ router.get('/languages', async (req, res) => {
   }
 });
 
-router.post('/challenges', async (req, res) => {
+router.post('/challenges', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
   try {
     const apiKey = getOneCompilerApiKey();
 
@@ -366,6 +459,21 @@ router.post('/challenges', async (req, res) => {
       return sendUpstreamFailure(res, upstream.status, upstream.payload, 'Challenge creation failed');
     }
 
+    const createdChallengeId = extractChallengeId(upstream.payload);
+    if (createdChallengeId) {
+      await ChallengeOwnership.findOneAndUpdate(
+        { challenge_id: createdChallengeId },
+        {
+          challenge_id: createdChallengeId,
+          owner_id: req.user.id,
+          original_author_id: req.user.id,
+          is_public: false,
+          is_active: true
+        },
+        { upsert: true, new: true }
+      );
+    }
+
     return res.status(upstream.status).json(upstream.payload);
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -376,7 +484,7 @@ router.post('/challenges', async (req, res) => {
   }
 });
 
-router.put('/challenges/:challengeId', async (req, res) => {
+router.put('/challenges/:challengeId', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
   try {
     const apiKey = getOneCompilerApiKey();
 
@@ -392,6 +500,16 @@ router.put('/challenges/:challengeId', async (req, res) => {
 
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
       return res.status(400).json({ error: 'Challenge payload must be a JSON object' });
+    }
+
+    const ownership = await ChallengeOwnership.findOne({ challenge_id: challengeId, is_active: true }).lean();
+    if (!ownership) {
+      return res.status(404).json({ error: 'Challenge ownership not found' });
+    }
+
+    const isOwner = ownership.owner_id?.toString() === req.user.id;
+    if (req.user.role === 'teacher' && !isOwner) {
+      return res.status(403).json({ error: 'You do not have access to update this challenge' });
     }
 
     const challenge = req.body.challenge;
@@ -722,6 +840,27 @@ router.put('/challenges/:challengeId', async (req, res) => {
       return sendUpstreamFailure(res, upstream.status, upstream.payload, 'Challenge update failed');
     }
 
+    const recreatedChallengeId = upstream.payload?._meta?.recreatedChallengeId || upstream.payload?._meta?.recreated_challenge_id;
+    if (recreatedChallengeId) {
+      await ChallengeOwnership.findOneAndUpdate(
+        { challenge_id: recreatedChallengeId },
+        {
+          challenge_id: recreatedChallengeId,
+          owner_id: ownership.owner_id,
+          original_author_id: ownership.original_author_id || ownership.owner_id,
+          is_public: ownership.is_public,
+          is_active: true
+        },
+        { upsert: true, new: true }
+      );
+
+      await ChallengeOwnership.findOneAndUpdate(
+        { challenge_id: challengeId },
+        { is_active: false },
+        { new: true }
+      );
+    }
+
     return res.status(upstream.status).json(upstream.payload);
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -729,6 +868,249 @@ router.put('/challenges/:challengeId', async (req, res) => {
     }
 
     return res.status(500).json({ error: 'Failed to update challenge' });
+  }
+});
+
+router.get('/challenges/central', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
+  try {
+    const apiKey = getOneCompilerApiKey();
+    if (!apiKey) {
+      return res.status(500).json({ error: 'ONECOMPILER_API_KEY is not configured on server' });
+    }
+
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const safeLimit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(requestedLimit, 200))
+      : 50;
+
+    const searchText = String(req.query.q || '').trim();
+
+    const ownershipRows = await ChallengeOwnership.find({ is_public: true, is_active: true })
+      .populate('original_author_id', 'full_name')
+      .lean();
+
+    const challengeIds = ownershipRows.map((row) => row.challenge_id).filter(Boolean);
+    const result = await listChallengesByIds({ apiKey, challengeIds, searchText, limit: safeLimit });
+
+    if (result.error) {
+      return sendUpstreamFailure(res, result.error.status, result.error.payload, 'Failed to load challenges');
+    }
+
+    const ownershipMap = new Map(ownershipRows.map((row) => [row.challenge_id, row]));
+    const challenges = result.challenges.map((item) => {
+      const meta = ownershipMap.get(item.id) || {};
+      const author = meta.original_author_id || null;
+      return {
+        ...item,
+        author_id: author?._id?.toString() || author?.id || null,
+        author_name: author?.full_name || null,
+        is_public: Boolean(meta.is_public)
+      };
+    });
+
+    return res.json({
+      status: 'success',
+      total: result.total,
+      count: challenges.length,
+      challenges
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      return res.status(504).json({ error: 'Challenge listing timed out' });
+    }
+
+    return res.status(500).json({ error: 'Failed to load challenges' });
+  }
+});
+
+router.get('/challenges/my', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
+  try {
+    const apiKey = getOneCompilerApiKey();
+    if (!apiKey) {
+      return res.status(500).json({ error: 'ONECOMPILER_API_KEY is not configured on server' });
+    }
+
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const safeLimit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(requestedLimit, 200))
+      : 50;
+
+    const searchText = String(req.query.q || '').trim();
+
+    const ownershipRows = await ChallengeOwnership.find({ owner_id: req.user.id, is_active: true })
+      .populate('original_author_id', 'full_name')
+      .lean();
+
+    const challengeIds = ownershipRows.map((row) => row.challenge_id).filter(Boolean);
+    const result = await listChallengesByIds({ apiKey, challengeIds, searchText, limit: safeLimit });
+
+    if (result.error) {
+      return sendUpstreamFailure(res, result.error.status, result.error.payload, 'Failed to load challenges');
+    }
+
+    const ownershipMap = new Map(ownershipRows.map((row) => [row.challenge_id, row]));
+    const challenges = result.challenges.map((item) => {
+      const meta = ownershipMap.get(item.id) || {};
+      const author = meta.original_author_id || null;
+      return {
+        ...item,
+        author_id: author?._id?.toString() || author?.id || null,
+        author_name: author?.full_name || null,
+        is_public: Boolean(meta.is_public)
+      };
+    });
+
+    return res.json({
+      status: 'success',
+      total: result.total,
+      count: challenges.length,
+      challenges
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      return res.status(504).json({ error: 'Challenge listing timed out' });
+    }
+
+    return res.status(500).json({ error: 'Failed to load challenges' });
+  }
+});
+
+router.put('/challenges/:challengeId/visibility', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
+  try {
+    const challengeId = String(req.params.challengeId || '').trim();
+    if (!challengeId) return res.status(400).json({ error: 'challengeId is required' });
+
+    const ownership = await ChallengeOwnership.findOne({ challenge_id: challengeId, is_active: true });
+    if (!ownership) return res.status(404).json({ error: 'Challenge ownership not found' });
+
+    const isOwner = ownership.owner_id?.toString() === req.user.id;
+    if (req.user.role === 'teacher' && !isOwner) {
+      return res.status(403).json({ error: 'You do not have access to update this challenge' });
+    }
+
+    ownership.is_public = parseBooleanInput(req.body?.is_public, false);
+    await ownership.save();
+
+    res.json({
+      message: 'Challenge visibility updated',
+      challenge_id: challengeId,
+      is_public: ownership.is_public
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to update challenge visibility' });
+  }
+});
+
+router.post('/challenges/:challengeId/clone', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
+  try {
+    const apiKey = getOneCompilerApiKey();
+    if (!apiKey) {
+      return res.status(500).json({ error: 'ONECOMPILER_API_KEY is not configured on server' });
+    }
+
+    const challengeId = String(req.params.challengeId || '').trim();
+    if (!challengeId) return res.status(400).json({ error: 'challengeId is required' });
+
+    const ownership = await ChallengeOwnership.findOne({ challenge_id: challengeId, is_active: true }).lean();
+    if (!ownership) return res.status(404).json({ error: 'Challenge ownership not found' });
+
+    const isOwner = ownership.owner_id?.toString() === req.user.id;
+    if (!ownership.is_public && !isOwner) {
+      return res.status(403).json({ error: 'Challenge is not available for cloning' });
+    }
+
+    const sourceChallengeUpstream = await callOneCompiler({
+      url: `${ONECOMPILER_API_BASE}/v1/challenges/${encodeURIComponent(challengeId)}?access_token=${encodeURIComponent(apiKey)}`
+    });
+
+    if (!sourceChallengeUpstream.ok) {
+      return sendUpstreamFailure(res, sourceChallengeUpstream.status, sourceChallengeUpstream.payload, 'Failed to fetch challenge');
+    }
+
+    const payload = extractChallengePayload(sourceChallengeUpstream.payload);
+    if (!payload) {
+      return res.status(500).json({ error: 'Challenge payload could not be cloned' });
+    }
+
+    const existingCloneCount = await ChallengeOwnership.countDocuments({
+      owner_id: req.user.id,
+      source_challenge_id: challengeId,
+      is_active: true
+    });
+
+    const cloneIndex = existingCloneCount + 1;
+    const cloneTitle = `${String(payload.challenge?.title || 'Untitled Challenge').trim()} (clone-${cloneIndex})`;
+
+    const baseChallenge = toObject(payload.challenge);
+    const baseProperties = toObject(baseChallenge.properties);
+    const clonedProperties = { ...baseProperties };
+    delete clonedProperties.problemIds;
+
+    const cloneSeed = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const clonePayload = {
+      challenge: {
+        title: cloneTitle,
+        markdown: firstNonEmptyString([baseChallenge.markdown, ' ']),
+        tags: Array.isArray(baseChallenge.tags) ? baseChallenge.tags : [],
+        visibility: firstNonEmptyString([baseChallenge.visibility, 'unlisted']),
+        ...(Object.keys(clonedProperties).length > 0 ? { properties: clonedProperties } : {})
+      },
+      problems: payload.problems.map((problem, index) => {
+        const row = toObject(problem);
+        const rowProperties = toObject(row.properties);
+        return {
+          title: firstNonEmptyString([row.title]) || `Problem ${index + 1}`,
+          markdown: firstNonEmptyString([row.markdown]) || ' ',
+          visibility: firstNonEmptyString([row.visibility, 'public']),
+          properties: {
+            ...rowProperties,
+            problemType: firstNonEmptyString([rowProperties.problemType, 'code']),
+            clone_seed: cloneSeed
+          }
+        };
+      })
+    };
+
+    const createUpstream = await callOneCompiler({
+      url: `${ONECOMPILER_API_BASE}/v1/challenges/create?access_token=${encodeURIComponent(apiKey)}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clonePayload)
+    });
+
+    if (!createUpstream.ok) {
+      return sendUpstreamFailure(res, createUpstream.status, createUpstream.payload, 'Failed to clone challenge');
+    }
+
+    const newChallengeId = extractChallengeId(createUpstream.payload);
+    if (!newChallengeId) {
+      return res.status(500).json({ error: 'Challenge clone succeeded but no challengeId returned' });
+    }
+
+    await ChallengeOwnership.findOneAndUpdate(
+      { challenge_id: newChallengeId },
+      {
+        challenge_id: newChallengeId,
+        owner_id: req.user.id,
+        original_author_id: req.user.id,
+        source_challenge_id: challengeId,
+        is_public: false,
+        is_active: true
+      },
+      { upsert: true, new: true }
+    );
+
+    return res.status(201).json({
+      message: 'Challenge cloned successfully',
+      challengeId: newChallengeId
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      return res.status(504).json({ error: 'Challenge clone timed out' });
+    }
+
+    return res.status(500).json({ error: 'Failed to clone challenge' });
   }
 });
 
@@ -825,7 +1207,7 @@ router.get('/challenges/:challengeId', async (req, res) => {
   }
 });
 
-router.delete('/challenges/:challengeId', async (req, res) => {
+router.delete('/challenges/:challengeId', verifyToken, hasRole('teacher', 'admin'), async (req, res) => {
   try {
     const apiKey = getOneCompilerApiKey();
 
@@ -837,6 +1219,16 @@ router.delete('/challenges/:challengeId', async (req, res) => {
 
     if (!challengeId) {
       return res.status(400).json({ error: 'challengeId is required' });
+    }
+
+    const ownership = await ChallengeOwnership.findOne({ challenge_id: challengeId, is_active: true }).lean();
+    if (!ownership) {
+      return res.status(404).json({ error: 'Challenge ownership not found' });
+    }
+
+    const isOwner = ownership.owner_id?.toString() === req.user.id;
+    if (req.user.role === 'teacher' && !isOwner) {
+      return res.status(403).json({ error: 'You do not have access to delete this challenge' });
     }
 
     const deleteResult = await attemptDeleteChallenge({ apiKey, challengeId });
@@ -860,6 +1252,8 @@ router.delete('/challenges/:challengeId', async (req, res) => {
         attempts: failures.map((entry) => ({ name: entry.name, status: entry.status }))
       });
     }
+
+    await ChallengeOwnership.findOneAndUpdate({ challenge_id: challengeId }, { is_active: false }, { new: true });
 
     return res.json({
       status: 'success',

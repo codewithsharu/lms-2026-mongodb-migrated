@@ -37,6 +37,20 @@ const assessmentTemplateSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    original_author_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    source_template_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AssessmentTemplate',
+      default: null,
+    },
+    is_public: {
+      type: Boolean,
+      default: false,
+    },
     is_active: {
       type: Boolean,
       default: true,
@@ -48,5 +62,7 @@ const assessmentTemplateSchema = new mongoose.Schema(
 );
 
 assessmentTemplateSchema.index({ teacher_id: 1 });
+assessmentTemplateSchema.index({ is_public: 1, is_active: 1 });
+assessmentTemplateSchema.index({ original_author_id: 1 });
 
 module.exports = mongoose.model('AssessmentTemplate', assessmentTemplateSchema);
