@@ -65,6 +65,81 @@ const SelectMenu = ({ label, value, onChange, options, disabled = false }) => {
   );
 };
 
+const MultiSelectMenu = ({ label, value = [], onChange, options, disabled = false }) => {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [open]);
+
+  const selectedOptions = options.filter((option) => value.includes(option.value));
+  const selectedCount = selectedOptions.length;
+
+  const handleToggle = (optionValue) => {
+    if (value.includes(optionValue)) {
+      onChange(value.filter((v) => v !== optionValue));
+    } else {
+      onChange([...value, optionValue]);
+    }
+  };
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      {label && <label className="form-label">{label}</label>}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((prev) => !prev)}
+        className={`form-select flex w-full items-center justify-between gap-2 text-left ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
+      >
+        <span className="truncate">
+          {selectedCount === 0
+            ? 'Select templates'
+            : selectedCount === 1
+              ? selectedOptions[0]?.label
+              : `${selectedCount} selected`}
+        </span>
+        <FiChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+          {options.map((option) => (
+            <button
+              key={`${label}-${option.value || 'empty'}`}
+              type="button"
+              onClick={() => handleToggle(option.value)}
+              className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors flex items-center gap-2 ${
+                value.includes(option.value)
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={value.includes(option.value)}
+                onChange={() => {}}
+                className="h-4 w-4"
+              />
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const HostExamCreate = () => {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
@@ -78,7 +153,7 @@ const HostExamCreate = () => {
   const [hosting, setHosting] = useState(false);
 
   const [formData, setFormData] = useState({
-    template_id: '',
+    template_ids: [],
     exam_title: '',
     class_id: '',
     section_id: '',
@@ -98,8 +173,7 @@ const HostExamCreate = () => {
   // All available zones for comprehensive selection
   const allZones = ['blue', 'red', 'green', 'unassigned'];
 
-  const selectedTemplate = templates.find((item) => item.id === formData.template_id) || null;
-  const selectedClassScope = assignmentScope.find((item) => item.classId === formData.class_id) || null;
+  const selectedTemplates = templates.filter((item) => formData.template_ids.includes(item.id));
 
   // Get zone options with user counts
   const getZoneOptions = () => {
@@ -351,13 +425,13 @@ const HostExamCreate = () => {
   const handleHostExam = async (event) => {
     event.preventDefault();
 
-    if (!formData.template_id) {
-      toast.error('Please select a template first');
+    if (!formData.template_ids || formData.template_ids.length === 0) {
+      toast.error('Please select at least one template first');
       return;
     }
 
-    if (!selectedTemplate || Number(selectedTemplate.question_count || 0) <= 0) {
-      toast.error('Selected template has no questions. Add questions before scheduling the exam');
+    if (selectedTemplates.some((template) => Number(template.question_count || 0) <= 0)) {
+      toast.error('One or more selected templates have no questions. Add questions before scheduling the exam');
       return;
     }
 
@@ -392,7 +466,7 @@ const HostExamCreate = () => {
     try {
       setHosting(true);
       const response = await assessmentAPI.hostExam({
-        template_id: formData.template_id,
+        template_ids: formData.template_ids,
         exam_title: String(formData.exam_title || '').trim() || null,
         class_id: formData.class_id || null,
         section_id: formData.section_id || null,
@@ -474,18 +548,20 @@ const HostExamCreate = () => {
           <Card.Body>
             <form onSubmit={handleHostExam} className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <SelectMenu
-                  label="Assessment Template *"
-                  value={formData.template_id}
-                  onChange={(nextValue) => setFormData({ ...formData, template_id: nextValue })}
-                  options={[
-                    { value: '', label: 'Select template' },
-                    ...templates.map((template) => ({
-                      value: template.id,
-                      label: `${template.title} (${template.subject}) — ID: ${template.id.slice(0, 8)}`
-                    }))
-                  ]}
+                <MultiSelectMenu
+                  label="Assessment Templates *"
+                  value={formData.template_ids}
+                  onChange={(nextValues) => setFormData({ ...formData, template_ids: nextValues })}
+                  options={templates.map((template) => ({
+                    value: template.id,
+                    label: `${template.title} (${template.subject}) — ID: ${template.id.slice(0, 8)}`
+                  }))}
                 />
+                {selectedTemplates.length > 0 && (
+                  <p className="mt-2 text-sm text-slate-600">
+                    Selected: {selectedTemplates.length} template{selectedTemplates.length !== 1 ? 's' : ''} • Total questions: {selectedTemplates.reduce((sum, t) => sum + Number(t.question_count || 0), 0)}
+                  </p>
+                )}
               </div>
 
               <SelectMenu

@@ -5,7 +5,12 @@ const hostedAssessmentSchema = new mongoose.Schema(
     template_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'AssessmentTemplate',
-      required: true,
+      default: null,
+    },
+    template_ids: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: 'AssessmentTemplate',
+      default: [],
     },
     host_id: {
       type: mongoose.Schema.Types.ObjectId,

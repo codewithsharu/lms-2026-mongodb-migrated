@@ -280,7 +280,8 @@ const buildPreviewAttemptPayload = ({
   startSection,
   examTitle,
   examSubject,
-  previewQuestions
+  previewQuestions,
+  templates
 }) => {
   const questions = Array.isArray(previewQuestions) && previewQuestions.length > 0
     ? previewQuestions
@@ -320,7 +321,8 @@ const buildPreviewAttemptPayload = ({
         challenge_ids: enableCoding ? challengeIds : []
       }
     },
-    questions
+    questions,
+    templates: templates || []
   };
 };
 
@@ -368,6 +370,8 @@ const AssessmentAttempt = () => {
   const [submitting, setSubmitting] = useState(false);
   const [attemptData, setAttemptData] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateIndex, setSelectedTemplateIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [savedResponses, setSavedResponses] = useState({});
   const [markedForReview, setMarkedForReview] = useState({});
@@ -485,8 +489,25 @@ const AssessmentAttempt = () => {
     }
 
     setAttemptData({ attempt, hostedAssessment });
-    setQuestions(questionList);
-    setShowMcqQuestionPanel(questionList.length > 0);
+
+    // Handle templates with grouped questions
+    const templatesData = Array.isArray(payload?.templates) ? payload.templates : [];
+    // Add templateId to each question in templates for proper state scoping
+    const templatesWithIds = templatesData.map((template) => ({
+      ...template,
+      questions: Array.isArray(template.questions) ? template.questions.map((question, index) => ({
+        ...question,
+        index: question.index || index + 1,
+        templateId: template.id
+      })) : []
+    }));
+
+    const allQuestionsFlat = Array.isArray(payload?.questions) ? payload.questions : questionList;
+
+    setTemplates(templatesWithIds);
+    setQuestions(allQuestionsFlat);
+    setSelectedTemplateIndex(0);
+    setShowMcqQuestionPanel(allQuestionsFlat.length > 0 || templatesWithIds.length > 0);
 
     const initialAnswers = {};
     const initialSaved = {};
@@ -505,8 +526,8 @@ const AssessmentAttempt = () => {
         || null
     };
 
-    questionList.forEach((question) => {
-      const key = String(question.index);
+    allQuestionsFlat.forEach((question) => {
+      const key = question.templateId ? `${question.templateId}_${question.index}` : String(question.index);
       const normalized = normalizeAnswerForQuestion(question, attempt.answers?.[key]);
       initialAnswers[key] = normalized;
       initialSaved[key] = typeof persistedSaved?.[key] === 'boolean'
@@ -710,6 +731,37 @@ const AssessmentAttempt = () => {
       if (isPreviewMode) {
         let resolvedPreviewConfig = { ...previewConfig };
 
+        // If attemptId is not 'demo', fetch the hosted exam data
+        if (attemptId !== 'demo') {
+          try {
+            const examResponse = await assessmentAPI.getHostedExam(attemptId);
+            const exam = examResponse.data?.hostedExam || examResponse.data;
+            
+            if (exam) {
+              // Extract data from the hosted exam
+              const examTemplateIds = Array.isArray(exam.template_ids) ? exam.template_ids : (exam.template_id ? [exam.template_id] : []);
+              const examCodingSection = exam.coding_section || {};
+              const examChallengeIds = Array.isArray(examCodingSection.challenge_ids) ? examCodingSection.challenge_ids : [];
+              
+              // Update preview config with exam data
+              resolvedPreviewConfig = {
+                ...resolvedPreviewConfig,
+                templateIds: examTemplateIds,
+                templateId: examTemplateIds[0] || '',
+                challengeIds: examChallengeIds,
+                enableCoding: Boolean(examCodingSection.enabled && examChallengeIds.length > 0),
+                mcqCount: resolvedPreviewConfig.mcqCount || 20,
+                timerMinutes: resolvedPreviewConfig.timerMinutes || exam.duration_minutes || 60,
+                examTitle: String(exam.exam_title || exam.template?.title || resolvedPreviewConfig.examTitle || 'Assessment'),
+                examSubject: String(exam.template?.subject || resolvedPreviewConfig.examSubject || 'General Subject')
+              };
+            }
+          } catch (error) {
+            console.error('Failed to load hosted exam for preview:', error);
+            toast.error('Failed to load exam data for preview');
+          }
+        }
+
         const requestedTemplateIds = [
           ...new Set([
             ...(Array.isArray(resolvedPreviewConfig.templateIds) ? resolvedPreviewConfig.templateIds : []),
@@ -722,11 +774,22 @@ const AssessmentAttempt = () => {
             const templateResponse = await assessmentAPI.getTemplates();
             const templates = Array.isArray(templateResponse.data?.templates) ? templateResponse.data.templates : [];
             const selectedTemplates = templates.filter((template) => requestedTemplateIds.includes(template.id));
-            const previewQuestions = selectedTemplates.flatMap((template) => (
-              normalizeTemplateQuestionsForPreview(template.template_data)
-            )).map((question, index) => ({
+            
+            // Keep templates as separate sections with their questions
+            const templatesData = selectedTemplates.map((template) => ({
+              id: template.id,
+              title: template.title,
+              subject: template.subject,
+              questions: normalizeTemplateQuestionsForPreview(template.template_data).map((question, index) => ({
+                ...question,
+                index: index + 1,
+                templateId: template.id
+              }))
+            }));
+            
+            const previewQuestions = templatesData.flatMap((template) => template.questions).map((question, index) => ({
               ...question,
-              index: index + 1
+              globalIndex: index + 1
             }));
 
             if (previewQuestions.length > 0) {
@@ -736,7 +799,8 @@ const AssessmentAttempt = () => {
                 mcqCount: previewQuestions.length,
                 examTitle: String(primaryTemplate?.title || resolvedPreviewConfig.examTitle || 'Assessment'),
                 examSubject: String(primaryTemplate?.subject || resolvedPreviewConfig.examSubject || 'General Subject'),
-                previewQuestions
+                previewQuestions,
+                templates: templatesData
               };
             }
           } catch (error) {
@@ -749,8 +813,18 @@ const AssessmentAttempt = () => {
         }
 
         const previewPayload = buildPreviewAttemptPayload(resolvedPreviewConfig);
+        console.log('Preview payload built:', previewPayload);
         hasBootstrapAttemptRef.current = false;
-        hydrateAttemptState(previewPayload);
+        const hydrated = hydrateAttemptState(previewPayload);
+        console.log('Hydration result:', hydrated);
+        
+        if (!hydrated) {
+          console.error('Failed to hydrate attempt state, showing error');
+          toast.error('Failed to initialize preview. Please check console for details.');
+          setLoading(false);
+          return;
+        }
+        
         setSessionConflict(null);
         setShowSubmitModal(false);
         setShowFullscreenLock(false);
@@ -1015,17 +1089,42 @@ const AssessmentAttempt = () => {
     isPreviewMode
   ]);
 
+  // Helper to generate composite key for answers (templateId + question index)
+  const getQuestionKey = (question) => {
+    if (question.templateId) {
+      return `${question.templateId}_${question.index}`;
+    }
+    return String(question.index);
+  };
+
   const answeredCount = useMemo(() => {
-    return questions.filter((question) => Boolean(savedResponses[String(question.index)])).length;
+    return questions.filter((question) => Boolean(savedResponses[getQuestionKey(question)])).length;
   }, [questions, savedResponses]);
 
   const markedCount = useMemo(() => {
-    return questions.filter((question) => Boolean(markedForReview[String(question.index)])).length;
+    return questions.filter((question) => Boolean(markedForReview[getQuestionKey(question)])).length;
   }, [questions, markedForReview]);
 
   const unansweredCount = useMemo(() => Math.max(0, questions.length - answeredCount), [questions.length, answeredCount]);
 
-  const currentQuestion = questions[currentIndex] || null;
+  const currentTemplateQuestions = useMemo(() => {
+    if (templates.length > 0 && selectedTemplateIndex < templates.length) {
+      return templates[selectedTemplateIndex]?.questions || [];
+    }
+    return questions;
+  }, [templates, selectedTemplateIndex, questions]);
+
+  // Reset currentIndex when switching templates
+  useEffect(() => {
+    if (templates.length > 0 && selectedTemplateIndex < templates.length) {
+      const templateQuestions = templates[selectedTemplateIndex]?.questions || [];
+      if (currentIndex >= templateQuestions.length) {
+        setCurrentIndex(0);
+      }
+    }
+  }, [selectedTemplateIndex, templates]);
+
+  const currentQuestion = currentTemplateQuestions[currentIndex] || null;
   const currentQuestionText = useMemo(
     () => stripDuplicateQuestionPrefix(currentQuestion?.question, currentIndex + 1),
     [currentQuestion?.question, currentIndex]
@@ -1337,13 +1436,13 @@ const AssessmentAttempt = () => {
   }, []);
 
   const setSingleChoice = (questionIndex, optionIndex) => {
-    const key = String(questionIndex);
+    const key = getQuestionKey(currentQuestion);
     setAnswers((prev) => ({ ...prev, [key]: optionIndex }));
     setSavedResponses((prev) => ({ ...prev, [key]: true }));
   };
 
   const toggleMultipleChoice = (questionIndex, optionIndex) => {
-    const key = String(questionIndex);
+    const key = getQuestionKey(currentQuestion);
 
     setAnswers((prev) => {
       const existing = Array.isArray(prev[key]) ? prev[key] : [];
@@ -1363,7 +1462,7 @@ const AssessmentAttempt = () => {
   };
 
   const setBlankAnswer = (questionIndex, value) => {
-    const key = String(questionIndex);
+    const key = getQuestionKey(currentQuestion);
     setAnswers((prev) => ({ ...prev, [key]: value }));
     setSavedResponses((prev) => ({ ...prev, [key]: String(value || '').trim().length > 0 }));
   };
@@ -1561,7 +1660,7 @@ const AssessmentAttempt = () => {
 
   const clearCurrentResponse = () => {
     if (!currentQuestion) return;
-    const key = String(currentQuestion.index);
+    const key = getQuestionKey(currentQuestion);
     setAnswers((prev) => ({
       ...prev,
       [key]: getDefaultAnswerForQuestion(currentQuestion)
@@ -1571,7 +1670,7 @@ const AssessmentAttempt = () => {
 
   const toggleReviewForCurrent = () => {
     if (!currentQuestion) return;
-    const key = String(currentQuestion.index);
+    const key = getQuestionKey(currentQuestion);
     setMarkedForReview((prev) => ({
       ...prev,
       [key]: !prev[key]
@@ -1581,7 +1680,7 @@ const AssessmentAttempt = () => {
   const saveAndNext = () => {
     if (!currentQuestion) return;
 
-    const key = String(currentQuestion.index);
+    const key = getQuestionKey(currentQuestion);
     const currentValue = answers[key];
     const hasValue = hasAnswerValue(currentQuestion, currentValue);
 
@@ -1811,6 +1910,25 @@ const AssessmentAttempt = () => {
 
             {/* Middle - Section Switcher and Challenge Selector */}
             <div className="flex flex-wrap items-center gap-2 lg:flex-1 lg:justify-center">
+              {currentSection === 'mcq' && (
+                <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5">
+                  <label className="text-xs font-medium text-slate-700">Question Panel</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowMcqQuestionPanel(!showMcqQuestionPanel)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      showMcqQuestionPanel ? 'bg-blue-600' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        showMcqQuestionPanel ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+
               {currentSection === 'coding' && codingChallengeIds.length > 1 && (
                 <select
                   className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
@@ -1901,46 +2019,41 @@ const AssessmentAttempt = () => {
 
         {currentSection === 'mcq' ? (
           <>
-            {!showMcqQuestionPanel && (
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setShowMcqQuestionPanel(true)}
-                  className="px-3 py-1.5"
-                >
-                  <FiEye className="h-4 w-4" />
-                  Show Questions
-                </Button>
-              </div>
-            )}
-
             <div className={`grid min-h-[calc(100vh-190px)] grid-cols-1 gap-3 ${showMcqQuestionPanel ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
               {showMcqQuestionPanel && (
                 <Card className="order-2 flex h-full min-h-105 flex-col lg:order-2">
                   <Card.Header>
                     <div className="flex items-center justify-between">
                       <h2 className="section-title text-base">Questions</h2>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">{answeredCount}/{questions.length}</span>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => setShowMcqQuestionPanel(false)}
-                          className="px-2.5 py-1 text-xs"
-                        >
-                          <FiEyeOff className="h-3.5 w-3.5" />
-                          Hide
-                        </Button>
-                      </div>
+                      <span className="text-xs text-slate-500">{answeredCount}/{questions.length}</span>
                     </div>
                   </Card.Header>
+                  {templates.length > 0 && (
+                    <div className="border-b border-slate-200 px-4 py-2">
+                      <div className="flex flex-wrap gap-2">
+                        {templates.map((template, idx) => (
+                          <button
+                            key={template.template_id}
+                            onClick={() => setSelectedTemplateIndex(idx)}
+                            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                              selectedTemplateIndex === idx
+                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                            }`}
+                          >
+                            {template.template_title}
+                            <span className="ml-1.5 text-xs opacity-75">({template.questions.length})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <Card.Body className="hide-scrollbar flex-1 overflow-y-auto">
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-                    {questions.map((question, index) => {
-                      const key = String(question.index);
-                      const isSaved = Boolean(savedResponses[key]);
+                    {(templates.length > 0 ? templates[selectedTemplateIndex]?.questions || [] : questions).map((question, index) => {
+                      const key = getQuestionKey(question);
                       const isMarked = Boolean(markedForReview[key]);
+                      const isSaved = Boolean(savedResponses[key]);
 
                       return (
                         <button
@@ -1971,7 +2084,7 @@ const AssessmentAttempt = () => {
               <Card className="order-1 flex h-full min-h-105 flex-col lg:order-1">
                 <Card.Header>
                   <div className="flex items-center justify-between gap-3">
-                    <h2 className="section-title text-base">Question {currentIndex + 1} of {questions.length}</h2>
+                    <h2 className="section-title text-base">Question {currentIndex + 1} of {currentTemplateQuestions.length}</h2>
                     <span className="text-xs text-slate-500 capitalize">{currentQuestion?.type} {currentQuestion?.answerMode === 'multiple' ? '(multiple correct)' : ''}</span>
                   </div>
                 </Card.Header>
@@ -1985,13 +2098,13 @@ const AssessmentAttempt = () => {
                           type="text"
                           className="form-input text-base"
                           placeholder="Type your answer"
-                          value={String(answers[String(currentQuestion.index)] || '')}
+                          value={String(answers[getQuestionKey(currentQuestion)] || '')}
                           onChange={(event) => setBlankAnswer(currentQuestion.index, event.target.value)}
                         />
                       ) : (
                         <div className="space-y-3">
                           {currentQuestion.options.map((option, optionIndex) => {
-                            const key = String(currentQuestion.index);
+                            const key = getQuestionKey(currentQuestion);
                             const value = answers[key];
                             const selected = currentQuestion.answerMode === 'multiple'
                               ? (Array.isArray(value) && value.includes(optionIndex))

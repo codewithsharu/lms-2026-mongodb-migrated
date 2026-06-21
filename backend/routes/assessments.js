@@ -544,8 +544,9 @@ router.delete('/templates/:id', verifyToken, hasRole('teacher'), async (req, res
 
 router.post('/hosted', verifyToken, hasRole('teacher'), async (req, res) => {
   try {
-    const { template_id, class_id, section_id, zone, allow_resume, duration_minutes, max_attempts, result_mode, publish_status, start_time, end_time, exam_title, instructions, coding_section, assigned_student_ids = [] } = req.body;
-    if (!template_id || !duration_minutes || !max_attempts || !result_mode || !publish_status) return res.status(400).json({ error: 'template_id, duration, attempts, result mode and publish status are required' });
+    const { template_ids, class_id, section_id, zone, allow_resume, duration_minutes, max_attempts, result_mode, publish_status, start_time, end_time, exam_title, instructions, coding_section, assigned_student_ids = [] } = req.body;
+    const normalizedTemplateIds = Array.isArray(template_ids) ? template_ids.map(id => String(id).trim()).filter(Boolean) : [];
+    if (normalizedTemplateIds.length === 0 || !duration_minutes || !max_attempts || !result_mode || !publish_status) return res.status(400).json({ error: 'At least one template, duration, attempts, result mode and publish status are required' });
     const { normalized: normalizedStudentIds, invalid: invalidStudentIds } = normalizeStudentIdList(assigned_student_ids);
     if (invalidStudentIds.length > 0) return res.status(400).json({ error: 'One or more assigned student IDs are invalid' });
     if (normalizedStudentIds.length > 0) { const allowed = await getTeacherAllowedStudentIdSet(req.user.id); const unauth = normalizedStudentIds.filter(sid => !allowed.has(sid)); if (unauth.length > 0) return res.status(403).json({ error: 'One or more students are outside your scope' }); }
@@ -562,11 +563,11 @@ router.post('/hosted', verifyToken, hasRole('teacher'), async (req, res) => {
     const { normalized: ncs, error: cse } = validateCodingSectionInput(coding_section);
     if (cse) return res.status(400).json({ error: cse });
     const fps = resolvePublishStatusByWindow(String(publish_status), pet);
-    const template = await AssessmentTemplate.findOne({ _id: template_id, teacher_id: req.user.id }).select('_id teacher_id question_count template_data').lean();
-    if (!template) return res.status(404).json({ error: 'Template not found for this teacher' });
-    const vq = normalizeQuestionList(template.template_data);
-    if (!vq.length || safeInt(template.question_count, 0) <= 0) return res.status(400).json({ error: 'Template has zero valid questions' });
-    const data = await HostedAssessment.create({ template_id, host_id: req.user.id, class_id: class_id || null, section_id: section_id || null, zone: zone || null, allow_resume: par, duration_minutes: pd, max_attempts: pa, result_mode, publish_status: fps, start_time: pst, end_time: pet, coding_section: ncs, exam_title: String(exam_title || '').trim() || null, instructions: instructions ? String(instructions).trim() : null });
+    const templates = await AssessmentTemplate.find({ _id: { $in: normalizedTemplateIds }, teacher_id: req.user.id }).select('_id teacher_id question_count template_data').lean();
+    if (templates.length !== normalizedTemplateIds.length) return res.status(404).json({ error: 'One or more templates not found for this teacher' });
+    const totalQuestions = templates.reduce((sum, t) => sum + safeInt(t.question_count, 0), 0);
+    if (totalQuestions <= 0) return res.status(400).json({ error: 'Selected templates have no valid questions' });
+    const data = await HostedAssessment.create({ template_id: normalizedTemplateIds[0], template_ids: normalizedTemplateIds, host_id: req.user.id, class_id: class_id || null, section_id: section_id || null, zone: zone || null, allow_resume: par, duration_minutes: pd, max_attempts: pa, result_mode, publish_status: fps, start_time: pst, end_time: pet, coding_section: ncs, exam_title: String(exam_title || '').trim() || null, instructions: instructions ? String(instructions).trim() : null });
     const targetRows = await replaceHostedExamStudentTargets(data._id, normalizedStudentIds);
     const specificStudents = targetRows.map(i => ({ id: i.student?.id || i.student_id, full_name: i.student?.full_name || null, email: i.student?.email || null }));
     res.status(201).json({ message: publish_status === 'published' && fps === 'closed' ? 'Exam window is already over, saved as Closed' : 'Exam hosted successfully', hostedExam: { ...data.toObject(), id: data._id, specific_students: specificStudents } });
@@ -626,14 +627,14 @@ router.put('/hosted/:id', verifyToken, hasRole('teacher'), async (req, res) => {
     const { id } = req.params;
     const existing = await HostedAssessment.findOne({ _id: id, host_id: req.user.id }).lean();
     if (!existing) return res.status(404).json({ error: 'Hosted exam not found for this teacher' });
-    const { template_id, class_id, section_id, zone, allow_resume, duration_minutes, max_attempts, result_mode, publish_status, start_time, end_time, exam_title, instructions, coding_section, assigned_student_ids } = req.body;
+    const { template_ids, class_id, section_id, zone, allow_resume, duration_minutes, max_attempts, result_mode, publish_status, start_time, end_time, exam_title, instructions, coding_section, assigned_student_ids } = req.body;
     const rd = duration_minutes !== undefined ? safeInt(duration_minutes, 0) : safeInt(existing.duration_minutes, 0);
     const ra = max_attempts !== undefined ? safeInt(max_attempts, 0) : safeInt(existing.max_attempts, 0);
     const rar = allow_resume !== undefined ? parseBooleanInput(allow_resume, true) : existing.allow_resume !== false;
-    const rtid = template_id !== undefined ? String(template_id || '').trim() : existing.template_id?.toString();
+    const normalizedTemplateIds = template_ids !== undefined ? (Array.isArray(template_ids) ? template_ids.map(id => String(id).trim()).filter(Boolean) : []) : (existing.template_ids && existing.template_ids.length > 0 ? existing.template_ids.map(id => String(id)) : (existing.template_id ? [String(existing.template_id)] : []));
+    if (normalizedTemplateIds.length === 0) return res.status(400).json({ error: 'At least one template is required' });
     const rrm = result_mode !== undefined ? String(result_mode) : existing.result_mode;
     const rps = publish_status !== undefined ? String(publish_status) : existing.publish_status;
-    if (!rtid) return res.status(400).json({ error: 'template_id is required' });
     if (rd <= 0) return res.status(400).json({ error: 'Duration must be greater than 0' });
     if (ra <= 0) return res.status(400).json({ error: 'Max attempts must be at least 1' });
     if (!HOSTED_EXAM_ALLOWED_RESULT_MODES.includes(rrm)) return res.status(400).json({ error: 'Invalid result mode' });
@@ -646,18 +647,18 @@ router.put('/hosted/:id', verifyToken, hasRole('teacher'), async (req, res) => {
     if (pst && pet && pet <= pst) return res.status(400).json({ error: 'End time must be after start time' });
     if (rps === 'published' && (!pst || !pet)) return res.status(400).json({ error: 'Start and end time required to publish' });
     const fps = resolvePublishStatusByWindow(rps, pet);
-    const template = await AssessmentTemplate.findOne({ _id: rtid, teacher_id: req.user.id }).select('_id question_count template_data').lean();
-    if (!template) return res.status(404).json({ error: 'Linked template not found' });
-    const vq = normalizeQuestionList(template.template_data);
-    if (!vq.length || safeInt(template.question_count, 0) <= 0) return res.status(400).json({ error: 'Template has zero valid questions' });
-    const templateChanged = rtid !== existing.template_id?.toString();
+    const templates = await AssessmentTemplate.find({ _id: { $in: normalizedTemplateIds }, teacher_id: req.user.id }).select('_id question_count template_data').lean();
+    if (templates.length !== normalizedTemplateIds.length) return res.status(404).json({ error: 'One or more templates not found for this teacher' });
+    const totalQuestions = templates.reduce((sum, t) => sum + safeInt(t.question_count, 0), 0);
+    if (totalQuestions <= 0) return res.status(400).json({ error: 'Selected templates have no valid questions' });
+    const templatesChanged = JSON.stringify(normalizedTemplateIds.sort()) !== JSON.stringify((existing.template_ids && existing.template_ids.length > 0 ? existing.template_ids.map(id => String(id)) : [String(existing.template_id)]).sort());
     const csu = coding_section !== undefined ? validateCodingSectionInput(coding_section) : { normalized: normalizeCodingSection(existing.coding_section), error: null };
     if (csu.error) return res.status(400).json({ error: csu.error });
     const csChanged = JSON.stringify(csu.normalized || null) !== JSON.stringify(normalizeCodingSection(existing.coding_section) || null);
-    if (csChanged || templateChanged) { const ac = await AssessmentAttempt.countDocuments({ hosted_assessment_id: id }); if (ac > 0) return res.status(409).json({ error: templateChanged ? 'Template cannot be changed after attempts started' : 'Coding section cannot be changed after attempts started' }); }
+    if (csChanged || templatesChanged) { const ac = await AssessmentAttempt.countDocuments({ hosted_assessment_id: id }); if (ac > 0) return res.status(409).json({ error: templatesChanged ? 'Templates cannot be changed after attempts started' : 'Coding section cannot be changed after attempts started' }); }
     let normalizedStudentIds = null;
     if (assigned_student_ids !== undefined) { const { normalized, invalid } = normalizeStudentIdList(assigned_student_ids); if (invalid.length) return res.status(400).json({ error: 'Invalid student IDs' }); if (normalized.length) { const allowed = await getTeacherAllowedStudentIdSet(req.user.id); const unauth = normalized.filter(s => !allowed.has(s)); if (unauth.length) return res.status(403).json({ error: 'Students outside your scope' }); } normalizedStudentIds = normalized; }
-    const up = { template_id: rtid, class_id: class_id !== undefined ? (class_id || null) : existing.class_id, section_id: section_id !== undefined ? (section_id || null) : existing.section_id, zone: zone !== undefined ? (zone || null) : existing.zone, allow_resume: rar, duration_minutes: rd, max_attempts: ra, result_mode: rrm, publish_status: fps, start_time: pst, end_time: pet, coding_section: csu.normalized, exam_title: exam_title !== undefined ? (String(exam_title || '').trim() || null) : existing.exam_title, instructions: instructions !== undefined ? (instructions ? String(instructions).trim() : null) : existing.instructions };
+    const up = { template_id: normalizedTemplateIds[0], template_ids: normalizedTemplateIds, class_id: class_id !== undefined ? (class_id || null) : existing.class_id, section_id: section_id !== undefined ? (section_id || null) : existing.section_id, zone: zone !== undefined ? (zone || null) : existing.zone, allow_resume: rar, duration_minutes: rd, max_attempts: ra, result_mode: rrm, publish_status: fps, start_time: pst, end_time: pet, coding_section: csu.normalized, exam_title: exam_title !== undefined ? (String(exam_title || '').trim() || null) : existing.exam_title, instructions: instructions !== undefined ? (instructions ? String(instructions).trim() : null) : existing.instructions };
     const updated = await HostedAssessment.findByIdAndUpdate(id, up, { new: true }).lean();
     let specificStudents = [];
     if (normalizedStudentIds !== null) { const tr = await replaceHostedExamStudentTargets(id, normalizedStudentIds); specificStudents = tr.map(i => ({ id: i.student?.id || i.student_id, full_name: i.student?.full_name || null, email: i.student?.email || null })); } else { const { map } = await getStudentTargetMapForHostedExams([id]); specificStudents = (map[id] || []).map(i => ({ id: i.student?.id || i.student_id, full_name: i.student?.full_name || null, email: i.student?.email || null })); }
@@ -753,14 +754,25 @@ router.post('/student/hosted/:hostedAssessmentId/start', verifyToken, hasRole('s
     const hostedExam = await HostedAssessment.findById(hostedAssessmentId).lean();
     if (!hostedExam) return res.status(404).json({ error: 'Hosted assessment not found' });
     if (hostedExam.publish_status !== 'published') return res.status(400).json({ error: 'Assessment is not published' });
-    const template = await AssessmentTemplate.findById(hostedExam.template_id).select('_id title subject total_marks passing_percentage template_data').lean();
-    hostedExam.template = template;
+    const templateIds = hostedExam.template_ids && hostedExam.template_ids.length > 0 ? hostedExam.template_ids : (hostedExam.template_id ? [hostedExam.template_id] : []);
+    const templates = await AssessmentTemplate.find({ _id: { $in: templateIds } }).select('_id title subject total_marks passing_percentage template_data').lean();
+    if (!templates.length) return res.status(400).json({ error: 'Templates not found' });
+    const primaryTemplate = templates[0];
+    hostedExam.templates = templates;
+    hostedExam.template = primaryTemplate;
     const { map: tm } = await getStudentTargetMapForHostedExams([hostedAssessmentId]);
     const tids = (tm[hostedAssessmentId] || []).map(i => i.student_id);
     if (!isExamAssignedToStudent(hostedExam, sd, req.user.id, tids)) return res.status(403).json({ error: 'Not assigned to your scope' });
     const ws = isWithinAttemptWindow(hostedExam); if (!ws.allowed) return res.status(400).json({ error: ws.reason });
-    const questions = normalizeQuestionList(template?.template_data);
-    if (!questions.length) return res.status(400).json({ error: 'Questions not configured' });
+    const questionsByTemplate = templates.map(template => ({
+      template_id: template._id,
+      template_title: template.title,
+      template_subject: template.subject,
+      template_type: 'mcq',
+      questions: normalizeQuestionList(template?.template_data || {}).map((q, idx) => ({ ...q, index: idx + 1 }))
+    })).filter(t => t.questions.length > 0);
+    if (!questionsByTemplate.length) return res.status(400).json({ error: 'Questions not configured' });
+    const totalQuestions = questionsByTemplate.reduce((sum, t) => sum + t.questions.length, 0);
     let activeAttempt = await AssessmentAttempt.findOne({ hosted_assessment_id: hostedAssessmentId, student_id: req.user.id, status: 'in_progress' }).sort({ created_at: -1 }).lean();
     if (activeAttempt && hostedExam.allow_resume === false) {
       try {
@@ -775,8 +787,7 @@ router.post('/student/hosted/:hostedAssessmentId/start', verifyToken, hasRole('s
       // Check if all attempts have been used (including submitted ones)
       if (usedAttempts >= maxAttempts) return res.status(400).json({ error: 'Maximum attempts reached' });
       
-      const totalQuestions = questions.length;
-      const configuredTotalMarks = safeNumber(template?.total_marks, totalQuestions);
+      const configuredTotalMarks = safeNumber(primaryTemplate?.total_marks, totalQuestions);
       // Generate simple test code for this attempt
       const testCode = `ATTEMPT_${hostedAssessmentId.slice(-6)}_${usedAttempts + 1}_${Date.now().toString().slice(-6)}`;
       
@@ -798,9 +809,11 @@ router.post('/student/hosted/:hostedAssessmentId/start', verifyToken, hasRole('s
     // Add 5-minute grace period for timeout to handle edge cases and network delays
     if (remainingSeconds <= -300) return res.status(400).json({ error: 'Attempt already timed out' });
     res.json({
-      hostedAssessment: { id: hostedExam._id, title: hostedExam.exam_title || template?.title || 'Assessment', subject: template?.subject || 'N/A', instructions: hostedExam.instructions || '', allow_resume: hostedExam.allow_resume !== false, result_mode: hostedExam.result_mode, start_time: hostedExam.start_time, end_time: hostedExam.end_time, duration_minutes: hostedExam.duration_minutes, max_attempts: hostedExam.max_attempts, coding_section: sanitizeCodingSectionForStudent(hostedExam.coding_section, sectionState) },
+      hostedAssessment: { id: hostedExam._id, title: hostedExam.exam_title || primaryTemplate?.title || 'Assessment', subject: primaryTemplate?.subject || 'N/A', instructions: hostedExam.instructions || '', allow_resume: hostedExam.allow_resume !== false, result_mode: hostedExam.result_mode, start_time: hostedExam.start_time, end_time: hostedExam.end_time, duration_minutes: hostedExam.duration_minutes, max_attempts: hostedExam.max_attempts, coding_section: sanitizeCodingSectionForStudent(hostedExam.coding_section, sectionState) },
       attempt: { id: activeAttempt._id, attempt_number: activeAttempt.attempt_number, status: activeAttempt.status, started_at: activeAttempt.started_at, answers: activeAttempt.answers || {}, current_section: sectionState.currentSection, section_completion_order: { mcq_completed_at: sectionState.mcqCompletedAt, coding_entered_at: sectionState.codingEnteredAt }, remaining_seconds: remainingSeconds, test_code: activeAttempt.test_code },
-      questions: sanitizeQuestionsForStudent(questions)
+      templates: questionsByTemplate,
+      coding_section: sanitizeCodingSectionForStudent(hostedExam.coding_section, sectionState),
+      templates_with_coding: templateIds.map(tid => ({ id: tid, type: hostedExam.coding_section?.challenge_ids?.length > 0 ? 'coding' : 'mcq' }))
     });
   } catch (error) { console.error('Start student attempt error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to start attempt') }); }
 });
@@ -851,12 +864,14 @@ router.get('/student/attempts/:attemptId', verifyToken, hasRole('student'), asyn
       return res.status(404).json({ error: 'Associated assessment not found' });
     }
     
-    const template = await AssessmentTemplate.findById(hostedExam.template_id).lean();
-    if (!template) {
+    const templateIds = hostedExam.template_ids && hostedExam.template_ids.length > 0 ? hostedExam.template_ids : (hostedExam.template_id ? [hostedExam.template_id] : []);
+    const templates = await AssessmentTemplate.find({ _id: { $in: templateIds } }).lean();
+    if (!templates.length) {
       return res.status(404).json({ error: 'Assessment template not found' });
     }
     
-    const hosted = { ...hostedExam, template };
+    const primaryTemplate = templates[0];
+    const hosted = { ...hostedExam, templates, template: primaryTemplate };
     
     // Check if assessment is still within valid window
     const windowCheck = isWithinAttemptWindow(hostedExam);
@@ -975,10 +990,18 @@ router.get('/student/attempts/:attemptId', verifyToken, hasRole('student'), asyn
       attempt = updated;
     }
     
-    const questions = normalizeQuestionList(template?.template_data);
+    const questions = templates.flatMap(t => normalizeQuestionList(t?.template_data) || []).map((q, idx) => ({ ...q, index: idx + 1 }));
     if (!questions.length) {
       return res.status(400).json({ error: 'Assessment questions are not properly configured' });
     }
+    
+    const questionsByTemplate = templates.map(template => ({
+      template_id: template._id,
+      template_title: template.title,
+      template_subject: template.subject,
+      template_type: 'mcq',
+      questions: normalizeQuestionList(template?.template_data || {}).map((q, idx) => ({ ...q, index: idx + 1 }))
+    })).filter(t => t.questions.length > 0);
     
     const sectionState = getAttemptSectionState(attempt.answers);
     const finalRemainingSeconds = getRemainingSeconds(attempt, hostedExam);
@@ -1022,8 +1045,8 @@ router.get('/student/attempts/:attemptId', verifyToken, hasRole('student'), asyn
     const responseData = {
       hostedAssessment: { 
         id: hostedExam._id, 
-        title: hostedExam.exam_title || template.title || 'Assessment', 
-        subject: template.subject || 'N/A', 
+        title: hostedExam.exam_title || primaryTemplate.title || 'Assessment', 
+        subject: primaryTemplate.subject || 'N/A', 
         instructions: hostedExam.instructions || '', 
         allow_resume: hostedExam.allow_resume !== false, 
         result_mode: hostedExam.result_mode, 
@@ -1053,6 +1076,13 @@ router.get('/student/attempts/:attemptId', verifyToken, hasRole('student'), asyn
         remaining_seconds: finalRemainingSeconds 
       },
       questions: sanitizeQuestionsForStudent(questions),
+      templates: questionsByTemplate.map(t => ({
+        template_id: t.template_id,
+        template_title: t.template_title,
+        template_subject: t.template_subject,
+        template_type: t.template_type,
+        questions: sanitizeQuestionsForStudent(t.questions)
+      })),
       data_persistence: {
         backup_enabled: enableBackup === 'true',
         progressive_save_active: attempt.status === 'in_progress' && enableBackup === 'true',

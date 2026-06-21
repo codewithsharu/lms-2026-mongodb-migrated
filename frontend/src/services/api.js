@@ -153,6 +153,7 @@ export const assessmentAPI = {
   deleteTemplate: (id) => api.delete(`/assessments/templates/${id}`),
   cloneTemplate: (id) => api.post(`/assessments/templates/${id}/clone`),
   getHostedExams: () => api.get('/assessments/hosted'),
+  getHostedExam: (id) => api.get(`/assessments/hosted/${id}`),
   hostExam: (data) => api.post('/assessments/hosted', data),
   updateHostedExam: (id, data) => api.put(`/assessments/hosted/${id}`, data),
   releaseHostedExamResults: (id) => api.post(`/assessments/hosted/${id}/release-results`),

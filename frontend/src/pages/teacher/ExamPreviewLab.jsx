@@ -343,14 +343,6 @@ const ExamPreviewLab = () => {
   };
 
   return (
-    <UnderDevelopment
-      title="Exam Preview Lab"
-      description="This exam preview lab is currently under development. The existing implementation is temporarily disabled."
-    />
-  );
-
-  /*
-  return (
     <Layout>
       <div className="app-page">
         <div className="page-header">
@@ -600,7 +592,6 @@ const ExamPreviewLab = () => {
       </div>
     </Layout>
   );
-  */
 };
 
 export default ExamPreviewLab;
