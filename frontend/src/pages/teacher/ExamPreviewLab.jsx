@@ -1,22 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+/* eslint-disable no-unused-vars */
+
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { FiChevronDown, FiClock, FiCode, FiPlay, FiRefreshCw, FiSearch } from 'react-icons/fi';
+import { FiCode, FiPlay, FiRefreshCw, FiSearch } from 'react-icons/fi';
 import Layout from '../../components/Layout';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import InputField from '../../components/ui/InputField';
+import UnderDevelopment from '../UnderDevelopment';
 import { assessmentAPI, compilerAPI } from '../../services/api';
-
-const clampNumber = (value, min, max, fallback) => {
-  const parsed = Number.parseInt(String(value ?? ''), 10);
-
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-
-  return Math.min(max, Math.max(min, parsed));
-};
 
 const extractProblemCount = (payload) => {
   if (Array.isArray(payload?.problems)) {
@@ -61,19 +54,18 @@ const ExamPreviewLab = () => {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [templateSearch, setTemplateSearch] = useState('');
-  const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [loadingTemplates, setLoadingTemplates] = useState(false);
-  const [durationMinutes, setDurationMinutes] = useState(60);
-  const [includeCoding, setIncludeCoding] = useState(true);
+  const [previewMode, setPreviewMode] = useState('combined');
   const [startSection, setStartSection] = useState('mcq');
   const [challengeSearch, setChallengeSearch] = useState('');
   const [loadingChallenges, setLoadingChallenges] = useState(false);
   const [challengeCatalog, setChallengeCatalog] = useState([]);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState([]);
   const [selectedChallengeIds, setSelectedChallengeIds] = useState([]);
   const [questionCountByChallenge, setQuestionCountByChallenge] = useState({});
   const [loadingCountByChallenge, setLoadingCountByChallenge] = useState({});
-  const templateDropdownRef = useRef(null);
+  const includesMcq = previewMode !== 'coding';
+  const includesCoding = previewMode !== 'mcq';
 
   const fetchTemplates = async () => {
     try {
@@ -81,18 +73,11 @@ const ExamPreviewLab = () => {
       const response = await assessmentAPI.getTemplates();
       const templateList = Array.isArray(response.data?.templates) ? response.data.templates : [];
       setTemplates(templateList);
-
-      setSelectedTemplateId((prev) => {
-        if (prev && templateList.some((item) => item.id === prev)) {
-          return prev;
-        }
-
-        return templateList[0]?.id || '';
-      });
+      setSelectedTemplateIds((prev) => prev.filter((id) => templateList.some((item) => item.id === id)));
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to load templates');
       setTemplates([]);
-      setSelectedTemplateId('');
+      setSelectedTemplateIds([]);
     } finally {
       setLoadingTemplates(false);
     }
@@ -101,7 +86,7 @@ const ExamPreviewLab = () => {
   const fetchChallenges = async () => {
     try {
       setLoadingChallenges(true);
-      const response = await compilerAPI.listChallenges({ limit: 120 });
+      const response = await compilerAPI.listTeacherChallenges({ limit: 120 });
       const challenges = Array.isArray(response.data?.challenges) ? response.data.challenges : [];
       setChallengeCatalog(challenges);
 
@@ -160,46 +145,36 @@ const ExamPreviewLab = () => {
     });
   }, [templates, templateSearch]);
 
-  const selectedTemplate = useMemo(() => {
-    return templates.find((template) => template.id === selectedTemplateId) || null;
-  }, [templates, selectedTemplateId]);
-
-  const selectedTemplateLabel = useMemo(() => {
-    if (!selectedTemplate) {
-      return 'Select template';
-    }
-
-    return buildTemplateOptionLabel(selectedTemplate);
-  }, [selectedTemplate]);
-
   useEffect(() => {
-    if (!templateDropdownOpen) {
-      return undefined;
+    if (previewMode === 'coding') {
+      setStartSection('coding');
+      return;
     }
 
-    const handleOutsideClick = (event) => {
-      if (!templateDropdownRef.current?.contains(event.target)) {
-        setTemplateDropdownOpen(false);
-        setTemplateSearch('');
-      }
-    };
+    if (previewMode === 'mcq') {
+      setStartSection('mcq');
+    }
+  }, [previewMode]);
 
-    document.addEventListener('mousedown', handleOutsideClick);
-
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-    };
-  }, [templateDropdownOpen]);
-
-  const handleTemplateSelect = (templateId) => {
-    setSelectedTemplateId(templateId);
-    setTemplateDropdownOpen(false);
-    setTemplateSearch('');
-  };
+  const selectedTemplates = useMemo(() => {
+    return selectedTemplateIds
+      .map((templateId) => templates.find((template) => template.id === templateId))
+      .filter(Boolean);
+  }, [selectedTemplateIds, templates]);
 
   const selectedTemplateQuestionCount = useMemo(() => {
-    return getTemplateQuestionCount(selectedTemplate);
-  }, [selectedTemplate]);
+    return selectedTemplates.reduce((total, template) => total + getTemplateQuestionCount(template), 0);
+  }, [selectedTemplates]);
+
+  const toggleTemplate = (templateId) => {
+    setSelectedTemplateIds((prev) => {
+      if (prev.includes(templateId)) {
+        return prev.filter((id) => id !== templateId);
+      }
+
+      return [...prev, templateId];
+    });
+  };
 
   const filteredChallenges = useMemo(() => {
     const normalizedSearch = String(challengeSearch || '').trim().toLowerCase();
@@ -321,34 +296,44 @@ const ExamPreviewLab = () => {
   };
 
   const launchPreview = () => {
-    if (!selectedTemplate) {
-      toast.error('Select a template to preview MCQ section');
+    if (includesMcq && selectedTemplates.length === 0) {
+      toast.error('Select at least one question bank to preview MCQ section');
       return;
     }
 
-    const safeMcq = Math.max(1, getTemplateQuestionCount(selectedTemplate));
-    if (safeMcq <= 0) {
-      toast.error('Selected template has no MCQ questions');
+    const mcqQuestionCount = includesMcq
+      ? selectedTemplates.reduce((total, template) => total + getTemplateQuestionCount(template), 0)
+      : 0;
+    if (includesMcq && mcqQuestionCount <= 0) {
+      toast.error('Selected question banks have no MCQ questions');
       return;
     }
+    const safeMcq = includesMcq ? Math.min(120, mcqQuestionCount) : 0;
 
-    const safeDuration = clampNumber(durationMinutes, 5, 300, 60);
-    const effectiveCoding = includeCoding && selectedChallengeIds.length > 0;
+    const safeDuration = 60;
+    const effectiveCoding = includesCoding && selectedChallengeIds.length > 0;
 
-    if (includeCoding && selectedChallengeIds.length === 0) {
+    if (includesCoding && selectedChallengeIds.length === 0) {
       toast.error('Select at least one coding challenge to preview coding section');
       return;
     }
 
     const params = new URLSearchParams();
     params.set('preview', '1');
-    params.set('templateId', selectedTemplate.id);
+    if (includesMcq && selectedTemplates.length > 0) {
+      const templateIds = selectedTemplates.map((template) => template.id).filter(Boolean);
+      params.set('templateIds', templateIds.join(','));
+      if (templateIds.length === 1) {
+        params.set('templateId', templateIds[0]);
+      }
+    }
     params.set('mcq', String(safeMcq));
     params.set('timer', String(safeDuration));
     params.set('coding', effectiveCoding ? '1' : '0');
-    params.set('start', effectiveCoding && startSection === 'coding' ? 'coding' : 'mcq');
-    params.set('title', String(selectedTemplate.title || 'Assessment'));
-    params.set('subject', String(selectedTemplate.subject || 'General Subject'));
+    params.set('start', includesCoding && startSection === 'coding' ? 'coding' : 'mcq');
+    const primaryTemplate = selectedTemplates[0] || null;
+    params.set('title', String(includesMcq ? (primaryTemplate?.title || 'Assessment') : 'Coding Preview'));
+    params.set('subject', String(includesMcq ? (primaryTemplate?.subject || 'General Subject') : 'Programming'));
 
     if (effectiveCoding) {
       params.set('challenges', selectedChallengeIds.join(','));
@@ -358,11 +343,19 @@ const ExamPreviewLab = () => {
   };
 
   return (
+    <UnderDevelopment
+      title="Exam Preview Lab"
+      description="This exam preview lab is currently under development. The existing implementation is temporarily disabled."
+    />
+  );
+
+  /*
+  return (
     <Layout>
       <div className="app-page">
         <div className="page-header">
           <h1>Exam Preview Lab</h1>
-          <p>Configure a dummy exam and open the student attempt window directly for fast UI testing.</p>
+          <p>Configure MCQ, coding, or combined preview runs and open the student attempt window directly for fast UI testing.</p>
         </div>
 
         <Card>
@@ -370,104 +363,56 @@ const ExamPreviewLab = () => {
             <h2 className="section-title text-base">Preview Configuration</h2>
           </Card.Header>
           <Card.Body className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <div className="relative" ref={templateDropdownRef}>
-                <label className="form-label">Assessment Template (MCQ Source)</label>
-                <button
-                  type="button"
-                  className="form-select flex w-full items-center justify-between gap-2 text-left"
-                  onClick={() => {
-                    setTemplateDropdownOpen((prev) => !prev);
-                    setTemplateSearch('');
-                  }}
-                  disabled={loadingTemplates}
-                >
-                  <span className={selectedTemplate ? 'text-slate-800' : 'text-slate-400'}>{selectedTemplateLabel}</span>
-                  <FiChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${templateDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {templateDropdownOpen && (
-                  <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg">
-                    <div className="border-b border-slate-100 p-2">
-                      <input
-                        className="form-input"
-                        placeholder="Search template"
-                        value={templateSearch}
-                        onChange={(event) => setTemplateSearch(event.target.value)}
-                        autoFocus
-                      />
-                    </div>
-                    <div className="max-h-64 overflow-y-auto p-1">
-                      {filteredTemplateOptions.length === 0 ? (
-                        <p className="px-2 py-2 text-xs text-slate-500">No templates match your search.</p>
-                      ) : (
-                        filteredTemplateOptions.map((template) => {
-                          const isSelected = selectedTemplateId === template.id;
-
-                          return (
-                            <button
-                              key={template.id}
-                              type="button"
-                              className={`w-full rounded-lg px-2 py-2 text-left transition-colors ${
-                                isSelected
-                                  ? 'bg-indigo-50 text-indigo-700'
-                                  : 'text-slate-700 hover:bg-slate-50'
-                              }`}
-                              onClick={() => handleTemplateSelect(template.id)}
-                            >
-                              <p className="truncate text-sm font-semibold">{template.title || 'Untitled'}</p>
-                              <p className="truncate text-xs text-slate-500">{`${template.subject || 'N/A'} | ${template.id}`}</p>
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <InputField
-                label="Timer (minutes)"
-                type="number"
-                min={5}
-                max={300}
-                value={durationMinutes}
-                onChange={(event) => setDurationMinutes(event.target.value)}
-                leftIcon={FiClock}
-              />
-
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <label className="form-label">Start Section</label>
+                <label className="form-label">Preview Mode</label>
                 <select
                   className="form-select"
-                  value={startSection}
-                  onChange={(event) => setStartSection(event.target.value)}
-                  disabled={!includeCoding}
+                  value={previewMode}
+                  onChange={(event) => setPreviewMode(event.target.value)}
                 >
-                  <option value="mcq">MCQ</option>
-                  <option value="coding">Coding</option>
+                  <option value="mcq">MCQ only</option>
+                  <option value="coding">Coding only</option>
+                  <option value="combined">Combined</option>
                 </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  {previewMode === 'mcq'
+                    ? 'Preview the MCQ bank only.'
+                    : previewMode === 'coding'
+                      ? 'Preview coding challenges only.'
+                      : 'Preview MCQ and coding sections together.'}
+                </p>
               </div>
+
+                  {previewMode === 'combined' ? (
+                    <div>
+                      <label className="form-label">Start Section</label>
+                      <select
+                        className="form-select"
+                        value={startSection}
+                        onChange={(event) => setStartSection(event.target.value)}
+                      >
+                        <option value="mcq">MCQ</option>
+                        <option value="coding">Coding</option>
+                      </select>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Choose which section the preview should open on.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                      {previewMode === 'coding'
+                        ? 'Coding-only preview opens directly in the coding section.'
+                        : 'MCQ-only preview starts in the selected question banks.'}
+                    </div>
+                  )}
             </div>
-
-            <p className="text-xs text-slate-500">
-              MCQ from template: {selectedTemplateQuestionCount} question(s)
-            </p>
-
-            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
-              <input
-                type="checkbox"
-                checked={includeCoding}
-                onChange={(event) => setIncludeCoding(event.target.checked)}
-              />
-              Include coding section
-            </label>
 
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
               <p className="text-sm text-slate-600">
-                {includeCoding
-                  ? `Selected coding questions: ${selectedQuestionLabel}`
-                  : 'Coding section disabled for this preview'}
+                {includesMcq
+                  ? `MCQ banks selected: ${selectedTemplates.length} bank(s), ${selectedTemplateQuestionCount} question(s)`
+                  : 'MCQ questions are disabled for this preview mode.'}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="secondary" onClick={fetchTemplates} disabled={loadingTemplates}>
@@ -483,7 +428,69 @@ const ExamPreviewLab = () => {
           </Card.Body>
         </Card>
 
-        {includeCoding && (
+        {includesMcq && (
+          <Card>
+            <Card.Header>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="section-title text-base">MCQ Question Banks</h2>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+                  {selectedTemplates.length} selected
+                </span>
+              </div>
+            </Card.Header>
+            <Card.Body className="space-y-3">
+              <InputField
+                label="Search Question Banks"
+                placeholder="Search by title, subject, or id"
+                value={templateSearch}
+                onChange={(event) => setTemplateSearch(event.target.value)}
+                leftIcon={FiSearch}
+              />
+
+              {loadingTemplates ? (
+                <p className="text-sm text-slate-500">Loading question banks...</p>
+              ) : templates.length === 0 ? (
+                <p className="text-sm text-slate-500">No question banks found in your account.</p>
+              ) : filteredTemplateOptions.length === 0 ? (
+                <p className="text-sm text-slate-500">No question banks match your search.</p>
+              ) : (
+                <div className="max-h-105 space-y-2 overflow-y-auto pr-1">
+                  {filteredTemplateOptions.map((template) => {
+                    const checked = selectedTemplateIds.includes(template.id);
+                    const questionCount = getTemplateQuestionCount(template);
+
+                    return (
+                      <label
+                        key={template.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2 transition-colors ${
+                          checked
+                            ? 'border-indigo-200 bg-indigo-50'
+                            : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleTemplate(template.id)}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-800">{template.title || 'Untitled Question Bank'}</p>
+                          <p className="mt-0.5 truncate text-xs text-slate-500">{`${template.subject || 'N/A'} | ${template.id}`}</p>
+                          <p className="mt-0.5 text-xs font-medium text-slate-600">
+                            {questionCount} question{questionCount === 1 ? '' : 's'} inside this bank
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        )}
+
+        {includesCoding && (
           <Card>
             <Card.Header>
               <div className="flex items-center justify-between gap-2">
@@ -509,7 +516,7 @@ const ExamPreviewLab = () => {
               ) : filteredChallenges.length === 0 ? (
                 <p className="text-sm text-slate-500">No challenges match your search.</p>
               ) : (
-                <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                <div className="max-h-105 space-y-2 overflow-y-auto pr-1">
                   {filteredChallenges.map((item) => {
                     const checked = selectedChallengeIds.includes(item.id);
                     const isLoadingCount = Boolean(loadingCountByChallenge[item.id]);
@@ -565,9 +572,11 @@ const ExamPreviewLab = () => {
             <div>
               <p className="text-sm font-semibold text-slate-800">Ready to preview student exam window</p>
               <p className="mt-1 text-xs text-slate-500">
-                {includeCoding
-                  ? `Coding part will use ${selectedQuestionLabel}.`
-                  : 'Coding section is disabled for this preview run.'}
+                {previewMode === 'mcq'
+                  ? 'This run will preview the MCQ bank only.'
+                  : previewMode === 'coding'
+                    ? 'This run will preview the coding challenge set only.'
+                    : `This run will preview both sections. Coding part will use ${selectedQuestionLabel}.`}
               </p>
             </div>
             <Button type="button" onClick={launchPreview}>
@@ -591,6 +600,7 @@ const ExamPreviewLab = () => {
       </div>
     </Layout>
   );
+  */
 };
 
 export default ExamPreviewLab;

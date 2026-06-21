@@ -92,7 +92,6 @@ const HostExamCreate = () => {
     start_time: '',
     end_time: '',
     instructions: '',
-    enable_coding_section: false,
     coding_challenge_ids: []
   });
 
@@ -273,7 +272,7 @@ const HostExamCreate = () => {
       );
 
       try {
-        const challengeRes = await compilerAPI.listChallenges({ limit: 150 });
+        const challengeRes = await compilerAPI.listTeacherChallenges({ limit: 150 });
         setChallengeCatalog(challengeRes.data?.challenges || []);
       } catch {
         setChallengeCatalog([]);
@@ -390,11 +389,6 @@ const HostExamCreate = () => {
       return;
     }
 
-    if (formData.enable_coding_section && formData.coding_challenge_ids.length === 0) {
-      toast.error('Select at least one coding challenge when coding section is enabled');
-      return;
-    }
-
     try {
       setHosting(true);
       const response = await assessmentAPI.hostExam({
@@ -412,7 +406,7 @@ const HostExamCreate = () => {
         end_time: formData.end_time || null,
         instructions: formData.instructions || null,
         assigned_student_ids: [],
-        coding_section: formData.enable_coding_section
+        coding_section: formData.coding_challenge_ids.length > 0
           ? {
             enabled: true,
             challenge_ids: formData.coding_challenge_ids
@@ -676,91 +670,79 @@ const HostExamCreate = () => {
                 />
               </div>
 
-              <div className="md:col-span-2 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 p-4 lg:p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={formData.enable_coding_section}
-                      onChange={(event) => setFormData((prev) => ({
-                        ...prev,
-                        enable_coding_section: event.target.checked,
-                        coding_challenge_ids: event.target.checked ? prev.coding_challenge_ids : []
-                      }))}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
-                    />
+              <div className="md:col-span-2 rounded-2xl border border-indigo-100 bg-linear-to-br from-indigo-50/70 via-white to-slate-50 p-4 lg:p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     <FiCode className="h-4 w-4 text-indigo-600" />
-                    Include Coding Section after MCQ
-                  </label>
-                  <span className={`status-badge ${formData.enable_coding_section ? 'success' : 'info'}`}>
-                    {formData.enable_coding_section
+                    Coding Section (optional)
+                  </div>
+                  <span className={`status-badge ${formData.coding_challenge_ids.length > 0 ? 'success' : 'info'}`}>
+                    {formData.coding_challenge_ids.length > 0
                       ? `${formData.coding_challenge_ids.length} selected`
-                      : 'Disabled'}
+                      : 'None selected'}
                   </span>
                 </div>
 
                 <p className="mt-1 text-xs text-slate-600">
-                  Students will complete MCQ first, then continue with coding challenges in the same attempt.
+                  Select coding challenges to include in the same exam attempt. If selected, students will see both MCQ and coding; if left blank, they will see MCQ only.
                 </p>
 
-                {formData.enable_coding_section && (
-                  <div className="mt-4 space-y-4">
-                    <InputField
-                      label="Search Coding Challenges"
-                      value={challengeSearch}
-                      onChange={(event) => setChallengeSearch(event.target.value)}
-                      placeholder="Search by challenge title or ID"
-                    />
+                <div className="mt-4 space-y-4">
+                  <InputField
+                    label="Search Coding Challenges"
+                    value={challengeSearch}
+                    onChange={(event) => setChallengeSearch(event.target.value)}
+                    placeholder="Search by challenge title or ID"
+                  />
 
-                    <div className="max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2">
-                      {filteredChallengeCatalog.length > 0 ? (
-                        <div className="space-y-2">
-                          {filteredChallengeCatalog.map((challenge) => {
-                            const checked = formData.coding_challenge_ids.includes(challenge.id);
+                  <div className="max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2">
+                    {filteredChallengeCatalog.length > 0 ? (
+                      <div className="space-y-2">
+                        {filteredChallengeCatalog.map((challenge) => {
+                          const checked = formData.coding_challenge_ids.includes(challenge.id);
 
-                            return (
-                              <label
-                                key={challenge.id}
-                                className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition ${
-                                  checked
-                                    ? 'border-indigo-200 bg-indigo-50/60 shadow-[0_1px_2px_rgba(79,70,229,0.12)]'
-                                    : 'border-transparent hover:border-slate-200 hover:bg-slate-50'
-                                }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => toggleCodingChallenge(challenge.id)}
-                                  className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
-                                />
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-semibold text-slate-800">
-                                    {challenge.title || 'Untitled Challenge'}
-                                  </span>
-                                  <span
-                                    className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                                      checked
-                                        ? 'border-indigo-200 bg-indigo-100 text-indigo-700'
-                                        : 'border-slate-200 bg-slate-50 text-slate-500'
-                                    }`}
-                                  >
-                                    ID: {challenge.id}
-                                  </span>
+                          return (
+                            <label
+                              key={challenge.id}
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition ${
+                                checked
+                                  ? 'border-indigo-200 bg-indigo-50/60 shadow-[0_1px_2px_rgba(79,70,229,0.12)]'
+                                  : 'border-transparent hover:border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleCodingChallenge(challenge.id)}
+                                className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-200"
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-semibold text-slate-800">
+                                  {challenge.title || 'Untitled Challenge'}
                                 </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <p className="px-2 py-4 text-sm text-slate-500">No coding challenges found.</p>
-                      )}
-                    </div>
-
-                    <p className="text-xs text-slate-600">
-                      Selected coding challenges: <span className="font-semibold text-slate-800">{formData.coding_challenge_ids.length}</span>
-                    </p>
+                                <span
+                                  className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                    checked
+                                      ? 'border-indigo-200 bg-indigo-100 text-indigo-700'
+                                      : 'border-slate-200 bg-slate-50 text-slate-500'
+                                  }`}
+                                >
+                                  ID: {challenge.id}
+                                </span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="px-2 py-4 text-sm text-slate-500">No coding challenges found.</p>
+                    )}
                   </div>
-                )}
+
+                  <p className="text-xs text-slate-600">
+                    Selected coding challenges: <span className="font-semibold text-slate-800">{formData.coding_challenge_ids.length}</span>
+                  </p>
+                </div>
               </div>
 
               <div className="md:col-span-2 flex justify-end">

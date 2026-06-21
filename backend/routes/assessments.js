@@ -140,6 +140,43 @@ const formatTemplateResponse = (template, authorFallback = null) => {
     is_public: Boolean(template.is_public)
   };
 };
+const formatReferenceResponse = (value, extraFields = []) => {
+  if (!value) return null;
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    const id = value?.toString?.() || String(value || '').trim();
+    return id ? { id } : null;
+  }
+
+  const id = value._id?.toString?.() || value.id?.toString?.() || value._id || value.id || value.toString?.() || null;
+  const formatted = id ? { id } : null;
+
+  if (!formatted) return null;
+
+  extraFields.forEach((field) => {
+    if (value[field] !== undefined) {
+      formatted[field] = value[field] || null;
+    }
+  });
+
+  return formatted;
+};
+const formatHostedExamResponse = (exam, extra = {}) => {
+  if (!exam) return null;
+
+  const template = formatReferenceResponse(exam.template_id, ['title', 'subject', 'question_count', 'total_marks', 'template_data']);
+  const classInfo = formatReferenceResponse(exam.class_id, ['name']);
+  const sectionInfo = formatReferenceResponse(exam.section_id, ['name']);
+
+  return {
+    ...exam,
+    ...extra,
+    id: exam._id,
+    template,
+    class: classInfo,
+    section: sectionInfo
+  };
+};
 const sanitizeQuestionsForStudent = (questions) => questions.map((q, i) => ({ index: i, type: q.type, question: q.question, answerMode: q.answerMode || 'single', options: q.type === 'mcq' ? q.options : [] }));
 const isWithinAttemptWindow = (exam) => { 
   const now = new Date(); 
@@ -534,6 +571,35 @@ router.post('/hosted', verifyToken, hasRole('teacher'), async (req, res) => {
     const specificStudents = targetRows.map(i => ({ id: i.student?.id || i.student_id, full_name: i.student?.full_name || null, email: i.student?.email || null }));
     res.status(201).json({ message: publish_status === 'published' && fps === 'closed' ? 'Exam window is already over, saved as Closed' : 'Exam hosted successfully', hostedExam: { ...data.toObject(), id: data._id, specific_students: specificStudents } });
   } catch (error) { console.error('Host exam error:', error); res.status(500).json({ error: getApiErrorMessage(error, 'Failed to host exam') }); }
+});
+
+router.get('/hosted/:id', verifyToken, hasRole('teacher'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const exam = await HostedAssessment.findOne({ _id: id, host_id: req.user.id })
+      .populate('template_id', 'title subject question_count total_marks template_data')
+      .populate('class_id', 'name')
+      .populate('section_id', 'name')
+      .lean();
+
+    if (!exam) return res.status(404).json({ error: 'Hosted exam not found for this teacher' });
+
+    const targets = await HostedAssessmentStudentTarget.find({ hosted_assessment_id: exam._id }).lean();
+    const targetStudents = await Promise.all(targets.map(async (target) => {
+      const student = await User.findById(target.student_id).select('_id full_name email roll_number').lean();
+      return {
+        id: student?._id || target.student_id,
+        full_name: student?.full_name || null,
+        email: student?.email || null,
+        roll_number: student?.roll_number || null
+      };
+    }));
+
+    res.json(formatHostedExamResponse(exam, { specific_students: targetStudents }));
+  } catch (error) {
+    console.error('Get hosted exam error:', error);
+    res.status(500).json({ error: getApiErrorMessage(error, 'Failed to fetch hosted exam') });
+  }
 });
 
 router.get('/hosted', verifyToken, hasRole('teacher'), async (req, res) => {
@@ -1526,7 +1592,7 @@ router.get('/metrics/student', verifyToken, hasRole('student'), async (req, res)
 router.get('/hosted/:examId/attempts', verifyToken, hasRole('teacher'), async (req, res) => {
   try {
     const { examId } = req.params;
-    const exam = await HostedAssessment.findById(examId);
+    const exam = await HostedAssessment.findOne({ _id: examId, host_id: req.user.id }).populate('template_id', 'template_data').lean();
     if (!exam) return res.status(404).json({ error: 'Exam not found' });
 
     const attempts = await AssessmentAttempt.find({ hosted_assessment_id: examId })
@@ -1535,7 +1601,7 @@ router.get('/hosted/:examId/attempts', verifyToken, hasRole('teacher'), async (r
 
     const attemptsWithProgress = attempts.map(attempt => {
       const answers = attempt.answers || {};
-      const totalQuestions = exam.template?.template_data?.questions?.length || 0;
+      const totalQuestions = exam.template_id?.template_data?.questions?.length || 0;
       const answeredQuestions = Object.keys(answers).filter(key => 
         !key.startsWith('__') && answers[key] !== null && answers[key] !== undefined && answers[key] !== ''
       ).length;
@@ -1564,12 +1630,20 @@ router.get('/attempts/:attemptId/details', verifyToken, hasRole('teacher'), asyn
     const { attemptId } = req.params;
     const attempt = await AssessmentAttempt.findById(attemptId)
       .populate('student_id', 'full_name email roll_number')
-      .populate('hosted_assessment_id');
+      .populate({
+        path: 'hosted_assessment_id',
+        populate: { path: 'template_id', select: 'title subject question_count total_marks template_data' }
+      });
 
     if (!attempt) return res.status(404).json({ error: 'Attempt not found' });
 
-    const exam = await HostedAssessment.findById(attempt.hosted_assessment_id._id)
-      .populate('template_id');
+    const exam = attempt.hosted_assessment_id;
+    if (!exam) return res.status(404).json({ error: 'Associated exam not found' });
+    if (exam.host_id?.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const formattedExam = formatHostedExamResponse(exam);
 
     const duration = attempt.started_at && attempt.submitted_at ? 
       Math.round((new Date(attempt.submitted_at) - new Date(attempt.started_at)) / 1000) : null;
@@ -1577,8 +1651,8 @@ router.get('/attempts/:attemptId/details', verifyToken, hasRole('teacher'), asyn
     res.json({
       ...attempt.toObject(),
       student: attempt.student_id,
-      hosted_assessment: attempt.hosted_assessment_id,
-      exam: exam,
+      hosted_assessment: formattedExam,
+      exam: formattedExam,
       duration_seconds: duration
     });
   } catch (error) {
@@ -1599,6 +1673,9 @@ router.post('/attempts/:attemptId/force-submit', verifyToken, hasRole('teacher')
     // Calculate score
     const exam = await HostedAssessment.findById(attempt.hosted_assessment_id).populate('template_id');
     if (!exam) return res.status(404).json({ error: 'Associated exam not found' });
+    if (exam.host_id?.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
 
     const questions = exam.template?.template_data?.questions || [];
     let score = 0;

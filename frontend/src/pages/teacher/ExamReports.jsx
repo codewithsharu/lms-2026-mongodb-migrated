@@ -63,7 +63,7 @@ const ExamReports = () => {
       setExamData(response.data);
     } catch (error) {
       toast.error('Failed to load exam data');
-      navigate('/teacher/hosted-exams');
+      navigate('/teacher/assessments/host');
     } finally {
       setLoading(false);
     }

@@ -76,6 +76,13 @@ const parseChallengeIds = (value) => {
     .filter(Boolean);
 };
 
+const parseTemplateIds = (value) => {
+  return String(value || '')
+    .split(',')
+    .map((token) => token.trim())
+    .filter(Boolean);
+};
+
 const extractChallengeQuestionCount = (payload) => {
   if (Array.isArray(payload?.problems)) {
     return payload.problems.length;
@@ -163,7 +170,11 @@ const getCodingSubmissionTotalCount = (submission) => {
 };
 
 const buildPreviewQuestions = (count = 20) => {
-  const safeCount = clampNumber(count, 1, 120, 20);
+  const safeCount = clampNumber(count, 0, 120, 20);
+
+  if (safeCount <= 0) {
+    return [];
+  }
 
   return Array.from({ length: safeCount }, (_, index) => {
     const questionNumber = index + 1;
@@ -326,6 +337,7 @@ const AssessmentAttempt = () => {
     const enabled = previewFromPath || previewFromQuery;
     const requestedCoding = parseBooleanFlag(searchParams.get('coding'));
     const challengeIds = parseChallengeIds(searchParams.get('challenges'));
+    const templateIds = parseTemplateIds(searchParams.get('templateIds'));
     const enableCoding = requestedCoding && challengeIds.length > 0;
     const requestedStart = String(searchParams.get('start') || 'mcq').toLowerCase();
     const examTitle = String(searchParams.get('title') || '').trim() || 'Assessment';
@@ -338,6 +350,7 @@ const AssessmentAttempt = () => {
       timerMinutes: clampNumber(searchParams.get('timer'), 5, 300, 60),
       enableCoding,
       challengeIds,
+      templateIds,
       startSection: enableCoding && requestedStart === 'coding' ? 'coding' : 'mcq',
       examTitle,
       examSubject,
@@ -444,7 +457,7 @@ const AssessmentAttempt = () => {
       validationErrors.push('Missing or invalid hosted assessment data');
     }
 
-    if (!questionList.length) {
+    if (!questionList.length && !hostedAssessment?.coding_section?.enabled) {
       validationErrors.push('No questions available');
     }
 
@@ -473,6 +486,7 @@ const AssessmentAttempt = () => {
 
     setAttemptData({ attempt, hostedAssessment });
     setQuestions(questionList);
+    setShowMcqQuestionPanel(questionList.length > 0);
 
     const initialAnswers = {};
     const initialSaved = {};
@@ -696,24 +710,34 @@ const AssessmentAttempt = () => {
       if (isPreviewMode) {
         let resolvedPreviewConfig = { ...previewConfig };
 
-        if (resolvedPreviewConfig.templateId) {
+        const requestedTemplateIds = [
+          ...new Set([
+            ...(Array.isArray(resolvedPreviewConfig.templateIds) ? resolvedPreviewConfig.templateIds : []),
+            resolvedPreviewConfig.templateId
+          ].filter(Boolean))
+        ];
+
+        if (requestedTemplateIds.length > 0) {
           try {
             const templateResponse = await assessmentAPI.getTemplates();
             const templates = Array.isArray(templateResponse.data?.templates) ? templateResponse.data.templates : [];
-            const selectedTemplate = templates.find((template) => template.id === resolvedPreviewConfig.templateId) || null;
+            const selectedTemplates = templates.filter((template) => requestedTemplateIds.includes(template.id));
+            const previewQuestions = selectedTemplates.flatMap((template) => (
+              normalizeTemplateQuestionsForPreview(template.template_data)
+            )).map((question, index) => ({
+              ...question,
+              index: index + 1
+            }));
 
-            if (selectedTemplate) {
-              const previewQuestions = normalizeTemplateQuestionsForPreview(selectedTemplate.template_data);
-
-              if (previewQuestions.length > 0) {
-                resolvedPreviewConfig = {
-                  ...resolvedPreviewConfig,
-                  mcqCount: previewQuestions.length,
-                  examTitle: String(selectedTemplate.title || resolvedPreviewConfig.examTitle || 'Assessment'),
-                  examSubject: String(selectedTemplate.subject || resolvedPreviewConfig.examSubject || 'General Subject'),
-                  previewQuestions
-                };
-              }
+            if (previewQuestions.length > 0) {
+              const primaryTemplate = selectedTemplates[0] || null;
+              resolvedPreviewConfig = {
+                ...resolvedPreviewConfig,
+                mcqCount: previewQuestions.length,
+                examTitle: String(primaryTemplate?.title || resolvedPreviewConfig.examTitle || 'Assessment'),
+                examSubject: String(primaryTemplate?.subject || resolvedPreviewConfig.examSubject || 'General Subject'),
+                previewQuestions
+              };
             }
           } catch (error) {
             console.error('Failed to load selected template for preview:', error);
@@ -1767,7 +1791,7 @@ const AssessmentAttempt = () => {
         ? 'p-1.5 pb-[88px] sm:p-2 sm:pb-[92px] lg:p-2.5 lg:pb-[96px]'
         : 'p-2 pb-28 sm:p-3 sm:pb-32 lg:p-4 lg:pb-32'
     }`}>
-      <div className="flex w-full flex-col ${currentSection === 'coding' ? 'gap-2' : 'gap-3'}">
+      <div className={`flex w-full flex-col ${currentSection === 'coding' ? 'gap-2' : 'gap-3'}`}>
         {/* Enterprise-style Header with Exam Info, Student Info, and Controls */}
         <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 p-3 shadow-sm sm:p-4 mb-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1999,6 +2023,13 @@ const AssessmentAttempt = () => {
 
                       <div className="rounded-md border border-slate-100 bg-slate-50 p-2 text-xs text-slate-500">
                         Use the bottom exam action dock for navigation and answer controls.
+                      </div>
+                    </div>
+                  ) : isPreviewMode && questions.length === 0 && hasCodingSection ? (
+                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+                      <div className="flex items-start gap-2">
+                        <FiCode className="mt-0.5 h-4 w-4" />
+                        <p>This is a coding-only preview. No MCQ questions were loaded for this run.</p>
                       </div>
                     </div>
                   ) : (

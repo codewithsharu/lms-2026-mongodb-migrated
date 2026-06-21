@@ -1763,15 +1763,19 @@ const UserManagement = ({ fixedRole = '' }) => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 mt-4">
-              <Button variant="secondary" onClick={() => handleDownloadTemplate('student')}>
-                <FiDownload className="h-4 w-4" />
-                Student Template
-              </Button>
-              <Button variant="secondary" onClick={() => handleDownloadTemplate('teacher')}>
-                <FiDownload className="h-4 w-4" />
-                Teacher Template
-              </Button>
+            <div className={`grid gap-3 mt-4 ${fixedRole ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+              {fixedRole !== 'teacher' && (
+                <Button variant="secondary" onClick={() => handleDownloadTemplate('student')}>
+                  <FiDownload className="h-4 w-4" />
+                  Student Template
+                </Button>
+              )}
+              {fixedRole !== 'student' && (
+                <Button variant="secondary" onClick={() => handleDownloadTemplate('teacher')}>
+                  <FiDownload className="h-4 w-4" />
+                  Teacher Template
+                </Button>
+              )}
             </div>
           </div>
         ) : (

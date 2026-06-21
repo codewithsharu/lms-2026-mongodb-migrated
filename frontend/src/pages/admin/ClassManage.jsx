@@ -50,7 +50,7 @@ const ClassManage = () => {
 
   const [classForm, setClassForm] = useState({ name: '', description: '', academic_year: '' });
   const [sectionForm, setSectionForm] = useState({ name: '' });
-  const [assignForm, setAssignForm] = useState({ teacher_id: '', section_id: '', zone: '' });
+  const [assignForm, setAssignForm] = useState({ teacher_id: '', section_id: '' });
   const [bulkAssignFile, setBulkAssignFile] = useState(null);
 
   const [teachers, setTeachers] = useState([]);
@@ -213,7 +213,7 @@ const ClassManage = () => {
   };
 
   const openAssignTeacher = async () => {
-    setAssignForm({ teacher_id: '', section_id: '', zone: '' });
+    setAssignForm({ teacher_id: '', section_id: '' });
     setEditingAssignmentId(null);
     await fetchTeachers();
     setShowAssignModal(true);
@@ -222,8 +222,7 @@ const ClassManage = () => {
   const openEditAssignment = async (assignment) => {
     setAssignForm({
       teacher_id: assignment.teacher?.id || assignment.teacher?._id || '',
-      section_id: assignment.section?.id || assignment.section?._id || '',
-      zone: assignment.zone || ''
+      section_id: assignment.section?.id || assignment.section?._id || ''
     });
     setEditingAssignmentId(assignment.id || assignment._id);
     await fetchTeachers();
@@ -392,10 +391,10 @@ const ClassManage = () => {
                       </Button>
                     ) : (
                       <>
-                        <Button variant="secondary" className="!h-9 !px-3" onClick={openBulkAssignTeacher}>
+                        {/* <Button variant="secondary" className="!h-9 !px-3" onClick={openBulkAssignTeacher}>
                           <FiUpload className="h-4 w-4" />
                           Bulk CSV
-                        </Button>
+                        </Button> */}
                         <Button variant="secondary" className="!h-9 !px-3" onClick={openAssignTeacher}>
                           <FiUserPlus className="h-4 w-4" />
                           Assign
@@ -601,7 +600,7 @@ const ClassManage = () => {
         open={showAssignModal}
         onClose={() => setShowAssignModal(false)}
         title={editingAssignmentId ? 'Edit Assignment' : 'Assign Teacher'}
-        subtitle="Assign a teacher to this class, section, and zone."
+        subtitle="Assign a teacher to this class and section."
         maxWidth="max-w-lg"
         footer={
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -655,16 +654,6 @@ const ClassManage = () => {
             ))}
           </SelectField>
 
-          <SelectField
-            label="Zone"
-            value={assignForm.zone}
-            onChange={(e) => setAssignForm({ ...assignForm, zone: e.target.value })}
-          >
-            <option value="">All Zones</option>
-            <option value="blue">Blue</option>
-            <option value="red">Red</option>
-            <option value="green">Green</option>
-          </SelectField>
         </form>
       </Modal>
 
@@ -709,7 +698,7 @@ const ClassManage = () => {
           setBulkAssignFile(null);
         }}
         title="Bulk Assign Teachers"
-        subtitle="Upload a CSV to assign multiple teachers to this class in one step."
+        subtitle="Upload a CSV to assign multiple teachers to this class and section in one step."
         maxWidth="max-w-xl"
         footer={
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -736,7 +725,7 @@ const ClassManage = () => {
               Required: <span className="font-medium">teacher_email</span> (or <span className="font-medium">teacher_id</span>)
             </p>
             <p className="text-sm text-slate-600">
-              Optional: <span className="font-medium">section_name</span> / <span className="font-medium">section_id</span>, <span className="font-medium">zone</span> (blue/red/green)
+              Optional: <span className="font-medium">section_name</span> / <span className="font-medium">section_id</span>
             </p>
             <a
               href="/teacher-assignments-template.csv"
