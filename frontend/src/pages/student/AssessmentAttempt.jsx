@@ -492,22 +492,55 @@ const AssessmentAttempt = () => {
 
     // Handle templates with grouped questions
     const templatesData = Array.isArray(payload?.templates) ? payload.templates : [];
-    // Add templateId to each question in templates for proper state scoping
-    const templatesWithIds = templatesData.map((template) => ({
+    // Add templateId and uniqueId to each question in templates for proper state scoping
+    // CRITICAL: Use templateIndex (array position) to guarantee uniqueness, not template.id which may be undefined
+    const templatesWithIds = templatesData.map((template, templateIndex) => ({
       ...template,
-      questions: Array.isArray(template.questions) ? template.questions.map((question, index) => ({
+      questions: Array.isArray(template.questions) ? template.questions.map((question, questionIndex) => ({
         ...question,
-        index: question.index || index + 1,
-        templateId: template.id
+        index: question.index || questionIndex + 1,
+        templateIndex: templateIndex,  // Store template position for debugging
+        templateId: template.id || `template_${templateIndex}`,  // Fallback to index if id is missing
+        // GUARANTEED UNIQUE: Use array indices if backend _id not available
+        // Format: t{templateIndex}_q{questionIndex} ensures no collisions across all templates
+        uniqueId: question._id || question.uniqueId || `t${templateIndex}_q${questionIndex}`
       })) : []
     }));
 
-    const allQuestionsFlat = Array.isArray(payload?.questions) ? payload.questions : questionList;
+    // Process flat questions and ensure they have unique identifiers
+    const allQuestionsFlat = Array.isArray(payload?.questions) 
+      ? payload.questions.map((question, qIndex) => ({
+          ...question,
+          index: question.index ?? qIndex,
+          // Use _id from backend if available (most reliable), otherwise generate
+          uniqueId: question._id || question.uniqueId || `flat_q_${qIndex}`
+        }))
+      : questionList.map((question, qIndex) => ({
+          ...question,
+          index: question.index ?? qIndex,
+          uniqueId: question._id || question.uniqueId || `flat_q_${qIndex}`
+        }));
+
+    // Process all questions with unique keys
+    // CRITICAL: Use template questions if templates exist, otherwise use flat questions
+    const allQuestionsForInitialization = [];
+
+    if (templatesWithIds.length > 0) {
+      // Use template questions only when templates are present
+      templatesWithIds.forEach((template) => {
+        if (Array.isArray(template.questions)) {
+          allQuestionsForInitialization.push(...template.questions);
+        }
+      });
+    } else {
+      // Use flat questions when no templates
+      allQuestionsForInitialization.push(...allQuestionsFlat);
+    }
 
     setTemplates(templatesWithIds);
-    setQuestions(allQuestionsFlat);
+    setQuestions(allQuestionsForInitialization);
     setSelectedTemplateIndex(0);
-    setShowMcqQuestionPanel(allQuestionsFlat.length > 0 || templatesWithIds.length > 0);
+    setShowMcqQuestionPanel(allQuestionsForInitialization.length > 0 || templatesWithIds.length > 0);
 
     const initialAnswers = {};
     const initialSaved = {};
@@ -525,15 +558,33 @@ const AssessmentAttempt = () => {
         || persistedSectionMeta?.codingEnteredAt
         || null
     };
-
-    allQuestionsFlat.forEach((question) => {
-      const key = question.templateId ? `${question.templateId}_${question.index}` : String(question.index);
+    
+    allQuestionsForInitialization.forEach((question) => {
+      // Use uniqueId for all questions - ensures no collisions across templates
+      const key = question.uniqueId || (question.templateId ? `${question.templateId}_${question.index}` : String(question.index));
       const normalized = normalizeAnswerForQuestion(question, attempt.answers?.[key]);
       initialAnswers[key] = normalized;
       initialSaved[key] = typeof persistedSaved?.[key] === 'boolean'
         ? persistedSaved[key]
         : hasAnswerValue(question, normalized);
     });
+
+    // DEBUG: Log all unique keys to verify no collisions
+    const uniqueKeys = allQuestionsForInitialization.map((q) => {
+      const key = q.uniqueId || (q.templateId ? `${q.templateId}_${q.index}` : String(q.index));
+      return {
+        question: q.question?.substring(0, 30),
+        templateIndex: q.templateIndex,
+        questionIndex: q.index,
+        uniqueId: q.uniqueId,
+        finalKey: key
+      };
+    });
+    console.group('🔍 ASSESSMENT STATE INITIALIZATION');
+    console.log('Total Questions:', uniqueKeys.length);
+    console.table(uniqueKeys);
+    console.log('Keys in answers state:', Object.keys(initialAnswers));
+    console.groupEnd();
 
     setAnswers(initialAnswers);
     setSavedResponses(initialSaved);
@@ -1089,15 +1140,34 @@ const AssessmentAttempt = () => {
     isPreviewMode
   ]);
 
-  // Helper to generate composite key for answers (templateId + question index)
+  // Helper to generate composite key for answers - ensures uniqueness across all questions
   const getQuestionKey = (question) => {
+    if (!question) return '';
+    // Priority: uniqueId (generated in initialization) > _id > templateId+index > index
+    if (question.uniqueId) {
+      return question.uniqueId;
+    }
+    if (question._id) {
+      return String(question._id);
+    }
     if (question.templateId) {
       return `${question.templateId}_${question.index}`;
     }
     return String(question.index);
   };
 
+  const currentTemplateQuestions = useMemo(() => {
+    if (templates.length > 0 && selectedTemplateIndex < templates.length) {
+      const templateQuestions = templates[selectedTemplateIndex]?.questions || [];
+      console.log(`📋 Template ${selectedTemplateIndex} selected with ${templateQuestions.length} questions:`, 
+        templateQuestions.map(q => ({ id: q.uniqueId, text: q.question?.substring(0, 20) })));
+      return templateQuestions;
+    }
+    return questions;
+  }, [templates, selectedTemplateIndex, questions]);
+
   const answeredCount = useMemo(() => {
+    // Count from all questions (flat array) to get total across all templates
     return questions.filter((question) => Boolean(savedResponses[getQuestionKey(question)])).length;
   }, [questions, savedResponses]);
 
@@ -1106,13 +1176,6 @@ const AssessmentAttempt = () => {
   }, [questions, markedForReview]);
 
   const unansweredCount = useMemo(() => Math.max(0, questions.length - answeredCount), [questions.length, answeredCount]);
-
-  const currentTemplateQuestions = useMemo(() => {
-    if (templates.length > 0 && selectedTemplateIndex < templates.length) {
-      return templates[selectedTemplateIndex]?.questions || [];
-    }
-    return questions;
-  }, [templates, selectedTemplateIndex, questions]);
 
   // Reset currentIndex when switching templates
   useEffect(() => {
@@ -1435,36 +1498,43 @@ const AssessmentAttempt = () => {
     };
   }, []);
 
-  const setSingleChoice = (questionIndex, optionIndex) => {
-    const key = getQuestionKey(currentQuestion);
-    setAnswers((prev) => ({ ...prev, [key]: optionIndex }));
-    setSavedResponses((prev) => ({ ...prev, [key]: true }));
+  const setSingleChoice = (questionKey, optionIndex) => {
+    if (!questionKey) return;
+    console.log(`✅ setSingleChoice - Key: "${questionKey}", Option: ${optionIndex}`);
+    setAnswers((prev) => {
+      const newState = { ...prev, [questionKey]: optionIndex };
+      console.log(`📊 Answers after update:`, Object.keys(newState).filter(k => Boolean(newState[k])));
+      return newState;
+    });
+    setSavedResponses((prev) => ({ ...prev, [questionKey]: true }));
   };
 
-  const toggleMultipleChoice = (questionIndex, optionIndex) => {
-    const key = getQuestionKey(currentQuestion);
-
+  const toggleMultipleChoice = (questionKey, optionIndex) => {
+    if (!questionKey) return;
+    console.log(`✅ toggleMultipleChoice - Key: "${questionKey}", Option: ${optionIndex}`);
     setAnswers((prev) => {
-      const existing = Array.isArray(prev[key]) ? prev[key] : [];
+      const existing = Array.isArray(prev[questionKey]) ? prev[questionKey] : [];
       const selected = new Set(existing);
 
       if (selected.has(optionIndex)) selected.delete(optionIndex);
       else selected.add(optionIndex);
 
       const nextSelection = Array.from(selected).sort((a, b) => a - b);
-      setSavedResponses((savedPrev) => ({ ...savedPrev, [key]: nextSelection.length > 0 }));
+      console.log(`📊 Answers after toggle:`, Object.keys(prev).filter(k => Boolean(prev[k])));
+      setSavedResponses((savedPrev) => ({ ...savedPrev, [questionKey]: nextSelection.length > 0 }));
 
       return {
         ...prev,
-        [key]: nextSelection
+        [questionKey]: nextSelection
       };
     });
   };
 
-  const setBlankAnswer = (questionIndex, value) => {
-    const key = getQuestionKey(currentQuestion);
-    setAnswers((prev) => ({ ...prev, [key]: value }));
-    setSavedResponses((prev) => ({ ...prev, [key]: String(value || '').trim().length > 0 }));
+  const setBlankAnswer = (questionKey, value) => {
+    if (!questionKey) return;
+    console.log(`✅ setBlankAnswer - Key: "${questionKey}", Value: "${value.substring(0, 20)}"`);
+    setAnswers((prev) => ({ ...prev, [questionKey]: value }));
+    setSavedResponses((prev) => ({ ...prev, [questionKey]: String(value || '').trim().length > 0 }));
   };
 
   const handleSubmit = async (forceAutoSubmit = false) => {
@@ -2025,7 +2095,7 @@ const AssessmentAttempt = () => {
                   <Card.Header>
                     <div className="flex items-center justify-between">
                       <h2 className="section-title text-base">Questions</h2>
-                      <span className="text-xs text-slate-500">{answeredCount}/{questions.length}</span>
+                      <span className="text-xs text-slate-500">{answeredCount}/{currentTemplateQuestions.length}</span>
                     </div>
                   </Card.Header>
                   {templates.length > 0 && (
@@ -2057,7 +2127,7 @@ const AssessmentAttempt = () => {
 
                       return (
                         <button
-                          key={question.index}
+                          key={question.uniqueId || question.index}
                           type="button"
                           onClick={() => setCurrentIndex(index)}
                           className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition-colors ${
@@ -2099,7 +2169,7 @@ const AssessmentAttempt = () => {
                           className="form-input text-base"
                           placeholder="Type your answer"
                           value={String(answers[getQuestionKey(currentQuestion)] || '')}
-                          onChange={(event) => setBlankAnswer(currentQuestion.index, event.target.value)}
+                          onChange={(event) => setBlankAnswer(getQuestionKey(currentQuestion), event.target.value)}
                         />
                       ) : (
                         <div className="space-y-3">
@@ -2115,10 +2185,11 @@ const AssessmentAttempt = () => {
                                 key={`${currentQuestion.index}-${optionIndex}`}
                                 type="button"
                                 onClick={() => {
+                                  const questionKey = getQuestionKey(currentQuestion);
                                   if (currentQuestion.answerMode === 'multiple') {
-                                    toggleMultipleChoice(currentQuestion.index, optionIndex);
+                                    toggleMultipleChoice(questionKey, optionIndex);
                                   } else {
-                                    setSingleChoice(currentQuestion.index, optionIndex);
+                                    setSingleChoice(questionKey, optionIndex);
                                   }
                                 }}
                                 className={`w-full rounded-lg border p-3.5 text-left text-[15px] transition-colors ${

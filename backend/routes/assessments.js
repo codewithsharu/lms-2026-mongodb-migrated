@@ -177,7 +177,7 @@ const formatHostedExamResponse = (exam, extra = {}) => {
     section: sectionInfo
   };
 };
-const sanitizeQuestionsForStudent = (questions) => questions.map((q, i) => ({ index: i, type: q.type, question: q.question, answerMode: q.answerMode || 'single', options: q.type === 'mcq' ? q.options : [] }));
+const sanitizeQuestionsForStudent = (questions) => questions.map((q, i) => ({ index: i, type: q.type, question: q.question, answerMode: q.answerMode || 'single', options: q.type === 'mcq' ? q.options : [], _id: q._id ? String(q._id) : undefined }));
 const isWithinAttemptWindow = (exam) => { 
   const now = new Date(); 
   const s = exam.start_time ? new Date(exam.start_time) : null; 
@@ -195,24 +195,49 @@ const isWithinAttemptWindow = (exam) => {
   return { allowed: true }; 
 };
 const isExamAssignedToStudent = (exam, sd, studentId, targetedIds = []) => { if (!exam || !sd) return false; const ts = new Set((targetedIds || []).filter(Boolean)); if (ts.size > 0) return ts.has(studentId); if (exam.class_id && exam.class_id.toString() !== sd.class_id?.toString()) return false; const sm = !exam.section_id || exam.section_id.toString() === sd.section_id?.toString(); const zm = !exam.zone || exam.zone === sd.zone; return sm && zm; };
-const getRemainingSeconds = (attempt, exam) => { 
-  const s = attempt?.started_at ? new Date(attempt.started_at) : null; 
-  const d = safeInt(exam?.duration_minutes, 0); 
+const getRemainingSeconds = (attempt, exam) => {
+  const s = attempt?.started_at ? new Date(attempt.started_at) : null;
+  const d = safeInt(exam?.duration_minutes, 0);
   const windowEnd = exam?.end_time ? new Date(exam.end_time) : null;
-  
-  if (!s || Number.isNaN(s.getTime()) || d <= 0) return 0;
-  
+  const windowStart = exam?.start_time ? new Date(exam.start_time) : null;
+
+  console.log('🕐 getRemainingSeconds debug:', {
+    started_at: s,
+    duration_minutes: d,
+    end_time: windowEnd,
+    start_time: windowStart
+  });
+
+  if (!s || Number.isNaN(s.getTime())) return 0;
+
   const now = Date.now();
-  const elapsed = Math.floor((now - s.getTime()) / 1000);
-  const durationBasedRemaining = Math.max(0, d * 60 - Math.max(0, elapsed));
-  
-  // Also consider exam window end time
+
+  // If window end time is set, use it as primary time limit
   if (windowEnd && !Number.isNaN(windowEnd.getTime())) {
     const windowBasedRemaining = Math.floor((windowEnd.getTime() - now) / 1000);
-    return Math.max(0, Math.min(durationBasedRemaining, windowBasedRemaining));
+    console.log('🕐 Window-based remaining:', windowBasedRemaining, 'seconds');
+    // If duration is also set, use the minimum of duration-based and window-based
+    if (d > 0) {
+      const elapsed = Math.floor((now - s.getTime()) / 1000);
+      const durationBasedRemaining = Math.max(0, d * 60 - Math.max(0, elapsed));
+      console.log('🕐 Duration-based remaining:', durationBasedRemaining, 'seconds');
+      return Math.max(0, Math.min(durationBasedRemaining, windowBasedRemaining));
+    }
+    // If only window end time is set, use it exclusively
+    return Math.max(0, windowBasedRemaining);
   }
-  
-  return Math.max(0, durationBasedRemaining); 
+
+  // If no window end time but duration is set, use duration-based calculation
+  if (d > 0) {
+    const elapsed = Math.floor((now - s.getTime()) / 1000);
+    const durationBasedRemaining = Math.max(0, d * 60 - Math.max(0, elapsed));
+    console.log('🕐 Duration-based only remaining:', durationBasedRemaining, 'seconds');
+    return durationBasedRemaining;
+  }
+
+  console.log('🕐 No time limit set, returning 0');
+  // If neither window end time nor duration is set, return 0
+  return 0;
 };
 const normalizeSubmittedAnswer = (q, raw) => { if (q.type === 'blank') return String(raw || '').trim(); if (q.answerMode === 'multiple') { if (!Array.isArray(raw)) return []; return [...new Set(raw.map(v => Number(v)).filter(v => Number.isInteger(v) && v >= 0 && v <= 3))].sort((a, b) => a - b); } if (raw === null || raw === undefined || raw === '') return null; const s = Number(raw); return Number.isInteger(s) && s >= 0 && s <= 3 ? s : null; };
 const isAnswerCorrect = (q, a) => { if (q.type === 'blank') return String(a || '').toLowerCase() === String(q.blankAnswer || '').trim().toLowerCase(); if (q.answerMode === 'multiple') { if (!Array.isArray(a)) return false; if (a.length !== q.correctOptions.length) return false; return a.every((v, i) => v === q.correctOptions[i]); } if (!Number.isInteger(a)) return false; return Number(a) === Number(q.correctOptions[0]); };
