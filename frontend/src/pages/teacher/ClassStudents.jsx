@@ -87,7 +87,19 @@ const TeacherClassStudents = () => {
       let data = res.data || [];
       // filter by section if not "all"
       if (sectionId && sectionId !== 'all') {
+        // console.log(sectionId)
         data = data.filter(s => s.section?.id === sectionId || String(s.section_id) === sectionId);
+      }else{
+        const res = await classAPI.getSections(classId);
+        let secdata = res.data || [];
+        data.forEach(element => {
+        const section = secdata.find(
+          x => x._id === element.section_id
+        );
+
+        element.section_name = section?.name || "";
+      });
+        // console.log(data)
       }
       setStudents(data);
     } catch (e) {
@@ -287,15 +299,27 @@ const TeacherClassStudents = () => {
                           <TableCell sx={{ fontSize: 13, color: '#374151', fontFamily: 'monospace' }}>
                             {student.roll_number || '—'}
                           </TableCell>
+                          {sectionName == 'All Sections'?
                           <TableCell>
-                            {student.section?.name ? (
+                            {student.section_id ? (
                               <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: 99, padding: '3px 10px' }}>
-                                {student.section.name}
+                                {student.section_name}
                               </span>
                             ) : (
                               <span style={{ color: '#9CA3AF', fontSize: 13 }}>—</span>
                             )}
                           </TableCell>
+                          :
+                          <TableCell>
+                            {student.section_id ? (
+                              <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', background: '#F3F4F6', border: '1px solid #E5E7EB', borderRadius: 99, padding: '3px 10px' }}>
+                                {sectionName}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#9CA3AF', fontSize: 13 }}>—</span>
+                            )}
+                          </TableCell>
+                          }
                           <TableCell>
                             {student.zone ? (
                               <ZoneBadge zone={student.zone} />

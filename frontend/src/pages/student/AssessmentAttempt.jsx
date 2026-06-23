@@ -283,9 +283,10 @@ const buildPreviewAttemptPayload = ({
   previewQuestions,
   templates
 }) => {
+  console.log("Test: ",mcqCount)
   const questions = Array.isArray(previewQuestions) && previewQuestions.length > 0
     ? previewQuestions
-    : buildPreviewQuestions(mcqCount);
+    : (mcqCount > 0 ? buildPreviewQuestions(mcqCount) : []);
   const startedAt = new Date().toISOString();
   const startInCoding = enableCoding && startSection === 'coding';
 
@@ -331,6 +332,7 @@ const AssessmentAttempt = () => {
   const location = useLocation();
   const { attemptId } = useParams();
   const { user } = useAuth();
+  // console.log(attemptId)
 
   const previewConfig = useMemo(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -348,7 +350,7 @@ const AssessmentAttempt = () => {
 
     return {
       enabled,
-      mcqCount: clampNumber(searchParams.get('mcq'), 1, 120, 20),
+      mcqCount: clampNumber(searchParams.get('mcq'), 0, 120, 0),
       timerMinutes: clampNumber(searchParams.get('timer'), 5, 300, 60),
       enableCoding,
       challengeIds,
@@ -1989,13 +1991,14 @@ const AssessmentAttempt = () => {
                     className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                       showMcqQuestionPanel ? 'bg-blue-600' : 'bg-slate-300'
                     }`}
-                  >
+                  > 
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                         showMcqQuestionPanel ? 'translate-x-5' : 'translate-x-0.5'
                       }`}
                     />
                   </button>
+                  
                 </div>
               )}
 
@@ -2013,14 +2016,15 @@ const AssessmentAttempt = () => {
 
               {hasCodingSection && (
                 <div className="exam-section-switcher inline-flex items-stretch p-1 bg-white rounded-lg border border-slate-200">
-                  <button
+                  {previewConfig.mcqCount>0 ?
+                    <button
                     type="button"
                     className={`exam-section-btn ${currentSection === 'mcq' ? 'is-active' : ''}`}
                     onClick={() => setCurrentSection('mcq')}
                   >
                     <span className={`section-index ${currentSection === 'mcq' ? 'is-active' : ''}`}
                     >
-                      1
+                      {previewConfig.mcqCount >0 ? 1 : 0}
                     </span>
                     <span className="min-w-0 leading-tight">
                       <span className="section-caption">Section</span>
@@ -2030,6 +2034,9 @@ const AssessmentAttempt = () => {
                       </span>
                     </span>
                   </button>
+                  :null
+                  }
+                  
 
                   <button
                     type="button"
@@ -2046,7 +2053,7 @@ const AssessmentAttempt = () => {
                   >
                     <span className={`section-index ${currentSection === 'coding' ? 'is-active' : ''}`}
                     >
-                      2
+                      {previewConfig.mcqCount <= 0 ? 1 : 2}
                     </span>
                     <span className="min-w-0 leading-tight">
                       <span className="section-caption">Section</span>

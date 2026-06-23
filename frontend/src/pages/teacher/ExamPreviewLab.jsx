@@ -330,6 +330,7 @@ const ExamPreviewLab = () => {
     params.set('mcq', String(safeMcq));
     params.set('timer', String(safeDuration));
     params.set('coding', effectiveCoding ? '1' : '0');
+    console.log(includesCoding,"   ",startSection)
     params.set('start', includesCoding && startSection === 'coding' ? 'coding' : 'mcq');
     const primaryTemplate = selectedTemplates[0] || null;
     params.set('title', String(includesMcq ? (primaryTemplate?.title || 'Assessment') : 'Coding Preview'));
