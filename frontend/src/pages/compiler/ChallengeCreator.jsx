@@ -1053,12 +1053,12 @@ const ChallengeCreator = () => {
                 );
               })}
               
-              <div className="mt-4 flex justify-center">
+              {!sourceChallengeId && <div className="mt-4 flex justify-center">
                 <Button type="button" variant="secondary" onClick={addQuestion} className="px-6">
                   <FiPlus className="h-4 w-4" />
                   Add Question
                 </Button>
-              </div>
+              </div>}
             </div>
         </section>
 
